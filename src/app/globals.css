@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root {
+  --color-cream: #faf3e8;
+  --color-cream-dark: #f0e4d3;
+  --color-paper: #fffdfa;
+  --color-brown-950: #241209;
+  --color-brown-900: #34200f;
+  --color-brown-800: #4a2e18;
+  --color-brown-700: #63401f;
+  --color-brown-600: #7a5228;
+  --color-gold-500: #c08a44;
+  --color-gold-400: #d3a765;
+  --color-gold-300: #e5c692;
+  --color-ink: #2a1b10;
+}
+
+@theme inline {
+  --color-cream: var(--color-cream);
+  --color-cream-dark: var(--color-cream-dark);
+  --color-paper: var(--color-paper);
+  --color-brown-950: var(--color-brown-950);
+  --color-brown-900: var(--color-brown-900);
+  --color-brown-800: var(--color-brown-800);
+  --color-brown-700: var(--color-brown-700);
+  --color-brown-600: var(--color-brown-600);
+  --color-gold-500: var(--color-gold-500);
+  --color-gold-400: var(--color-gold-400);
+  --color-gold-300: var(--color-gold-300);
+  --color-ink: var(--color-ink);
+
+  --font-display: "Playfair Display", serif;
+  --font-script: "Alex Brush", cursive;
+  --font-sans: "Poppins", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans), sans-serif;
+}
+
+::selection {
+  background: var(--color-gold-300);
+  color: var(--color-brown-950);
+}
+
+.font-display {
+  font-family: var(--font-display), serif;
+}
+
+.font-script {
+  font-family: var(--font-script), cursive;
+}
+
+/* Textura sutil de papel para secciones claras */
+.bg-grain {
+  background-image: radial-gradient(
+    rgba(74, 46, 24, 0.045) 1px,
+    transparent 1px
+  );
+  background-size: 3px 3px;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s ease-out both;
+}
+
+/* Scrollbar sutil */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-cream);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-gold-300);
+  border-radius: 999px;
+}
