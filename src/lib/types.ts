@@ -5,6 +5,7 @@ export type Category = {
   position: number;
   active: boolean;
   created_at: string;
+  image_url: string | null;
 };
 
 export type ProductSize = {

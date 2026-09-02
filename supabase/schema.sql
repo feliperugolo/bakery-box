@@ -20,7 +20,8 @@ create table if not exists categories (
   slug text not null unique,
   position integer not null default 0,
   active boolean not null default true,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  image_url text -- foto elegida a mano; si es null se usa la del primer producto de la categoría
 );
 
 -- ----------------------------------------------------------------------------

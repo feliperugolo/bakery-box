@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   DndContext,
   closestCenter,
@@ -17,7 +18,17 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, Eye, EyeOff, Plus, Check, X } from "lucide-react";
+import {
+  GripVertical,
+  Trash2,
+  Eye,
+  EyeOff,
+  Plus,
+  Check,
+  X,
+  ImagePlus,
+  Loader2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Category } from "@/lib/types";
 
@@ -39,6 +50,7 @@ export default function CategoriesManager({
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
   const router = useRouter();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -115,6 +127,39 @@ export default function CategoriesManager({
     router.refresh();
   };
 
+  const uploadImage = async (cat: Category, file: File) => {
+    setUploadingId(cat.id);
+    const supabase = createClient();
+
+    const ext = file.name.split(".").pop();
+    const fileName = `category-${cat.id}-${crypto.randomUUID()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("product-images")
+      .upload(fileName, file, { cacheControl: "3600", upsert: false });
+
+    if (!uploadError) {
+      const { data } = supabase.storage.from("product-images").getPublicUrl(fileName);
+      const imageUrl = data.publicUrl;
+      setCategories((prev) =>
+        prev.map((c) => (c.id === cat.id ? { ...c, image_url: imageUrl } : c))
+      );
+      await supabase.from("categories").update({ image_url: imageUrl }).eq("id", cat.id);
+      router.refresh();
+    }
+
+    setUploadingId(null);
+  };
+
+  const clearImage = async (cat: Category) => {
+    const supabase = createClient();
+    setCategories((prev) =>
+      prev.map((c) => (c.id === cat.id ? { ...c, image_url: null } : c))
+    );
+    await supabase.from("categories").update({ image_url: null }).eq("id", cat.id);
+    router.refresh();
+  };
+
   return (
     <div>
       <div className="flex gap-2 rounded-2xl bg-paper p-4 shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
@@ -132,6 +177,11 @@ export default function CategoriesManager({
           <Plus className="h-4 w-4" /> Agregar
         </button>
       </div>
+      <p className="mt-2 text-xs text-brown-800/50">
+        Tocá la foto de una categoría para elegir la que se muestra en la
+        página principal. Si no elegís ninguna, se usa automáticamente la
+        foto del primer producto de esa categoría.
+      </p>
 
       <div className="mt-4">
         {categories.length === 0 ? (
@@ -146,12 +196,15 @@ export default function CategoriesManager({
                     category={cat}
                     editing={editingId === cat.id}
                     editingName={editingName}
+                    uploading={uploadingId === cat.id}
                     onEditingNameChange={setEditingName}
                     onStartEdit={() => startEdit(cat)}
                     onSaveEdit={() => saveEdit(cat)}
                     onCancelEdit={() => setEditingId(null)}
                     onToggleActive={() => toggleActive(cat)}
                     onDelete={() => handleDelete(cat.id)}
+                    onImageSelected={(file) => uploadImage(cat, file)}
+                    onImageClear={() => clearImage(cat)}
                   />
                 ))}
               </ul>
@@ -167,25 +220,32 @@ function SortableCategoryRow({
   category,
   editing,
   editingName,
+  uploading,
   onEditingNameChange,
   onStartEdit,
   onSaveEdit,
   onCancelEdit,
   onToggleActive,
   onDelete,
+  onImageSelected,
+  onImageClear,
 }: {
   category: Category;
   editing: boolean;
   editingName: string;
+  uploading: boolean;
   onEditingNameChange: (v: string) => void;
   onStartEdit: () => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
+  onImageSelected: (file: File) => void;
+  onImageClear: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: category.id });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -207,6 +267,53 @@ function SortableCategoryRow({
       >
         <GripVertical className="h-5 w-5" />
       </button>
+
+      <div className="group/thumb relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-cream-dark">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="absolute inset-0 flex items-center justify-center"
+          aria-label="Elegir foto de la categoría"
+          title="Elegir foto de la categoría"
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-brown-800/50" />
+          ) : category.image_url ? (
+            <Image
+              src={category.image_url}
+              alt=""
+              fill
+              sizes="48px"
+              className="object-cover transition group-hover/thumb:opacity-60"
+            />
+          ) : (
+            <ImagePlus className="h-4 w-4 text-brown-800/40" />
+          )}
+        </button>
+        {category.image_url && !uploading && (
+          <button
+            type="button"
+            onClick={onImageClear}
+            aria-label="Quitar foto de la categoría"
+            title="Usar foto automática"
+            className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-bl-lg bg-brown-950/70 text-white opacity-0 transition group-hover/thumb:opacity-100"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onImageSelected(file);
+            e.target.value = "";
+          }}
+        />
+      </div>
 
       {editing ? (
         <input

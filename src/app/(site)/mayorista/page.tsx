@@ -17,7 +17,7 @@ export default function MayoristaPage() {
         Mayorista
       </h1>
 
-      <div className="mx-auto mt-8 max-w-xl space-y-5 text-left leading-relaxed text-brown-800/80 sm:text-lg">
+      <div className="mx-auto mt-8 max-w-xl space-y-5 text-center leading-relaxed text-brown-800/80 sm:text-lg">
         <p>
           ¿Tenés una cafetería, restaurante o emprendimiento gastronómico y
           querés elevar el nivel de tu propuesta dulce?

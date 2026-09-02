@@ -35,6 +35,8 @@ export function pickCategoryImage(
   category: Category,
   products: Product[]
 ): string | null {
+  if (category.image_url) return category.image_url;
+
   const match = products.find(
     (p) => p.category_id === category.id && p.images[0]
   );

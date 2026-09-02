@@ -12,6 +12,7 @@ export const seedCategories: Category[] = [
     position: 1,
     active: true,
     created_at: new Date().toISOString(),
+    image_url: null,
   },
   {
     id: "seed-cat-cheesecakes",
@@ -20,6 +21,7 @@ export const seedCategories: Category[] = [
     position: 2,
     active: true,
     created_at: new Date().toISOString(),
+    image_url: null,
   },
   {
     id: "seed-cat-cajas",
@@ -28,6 +30,7 @@ export const seedCategories: Category[] = [
     position: 3,
     active: true,
     created_at: new Date().toISOString(),
+    image_url: null,
   },
   {
     id: "seed-cat-granolas",
@@ -36,6 +39,7 @@ export const seedCategories: Category[] = [
     position: 4,
     active: true,
     created_at: new Date().toISOString(),
+    image_url: null,
   },
 ];
 

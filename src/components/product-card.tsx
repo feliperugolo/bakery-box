@@ -8,7 +8,7 @@ import { Product } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { useCartStore } from "@/lib/cart-store";
 
-const HOVER_CYCLE_MS = 900;
+const HOVER_CYCLE_MS = 2000;
 
 export default function ProductCard({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
