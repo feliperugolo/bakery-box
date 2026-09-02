@@ -22,12 +22,8 @@ export default function SiteFooter({ settings }: { settings: SiteSettings }) {
             alt={settings.store_name}
             width={220}
             height={110}
-            className="mb-4 h-auto w-40 rounded-md bg-cream p-2"
+            className="h-auto w-40 rounded-md bg-cream p-2"
           />
-          <p className="max-w-xs text-sm leading-relaxed text-cream/70">
-            Tortas, cheesecakes y postres artesanales hechos a pedido, con
-            ingredientes seleccionados y mucho cariño.
-          </p>
         </div>
 
         <div>
@@ -83,8 +79,7 @@ export default function SiteFooter({ settings }: { settings: SiteSettings }) {
       </div>
 
       <div className="border-t border-cream/10 py-5 text-center text-xs text-cream/50">
-        © {new Date().getFullYear()} {settings.store_name}. Hecho con amor y
-        harina 🍰
+        © {new Date().getFullYear()} {settings.store_name}. Hecho con amor
       </div>
     </footer>
   );
