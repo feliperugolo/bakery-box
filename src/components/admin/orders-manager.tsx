@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Order } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
+import { formatDeliveryDate } from "@/lib/delivery";
 
 const statusOptions = [
   { value: "nuevo", label: "Nuevo", color: "bg-gold-500" },
@@ -57,7 +58,7 @@ export default function OrdersManager({ initialOrders }: { initialOrders: Order[
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-display text-lg text-brown-900">
+                <span className="text-lg font-semibold text-brown-900">
                   {formatPrice(order.total)}
                 </span>
                 <ChevronDown
@@ -83,6 +84,18 @@ export default function OrdersManager({ initialOrders }: { initialOrders: Order[
                 <p className="mb-1 text-sm text-brown-800/70">
                   <span className="font-medium">Teléfono:</span> {order.customer_phone}
                 </p>
+                {order.delivery_date && (
+                  <p className="mb-1 text-sm text-brown-800/70">
+                    <span className="font-medium">Día de entrega:</span>{" "}
+                    {formatDeliveryDate(order.delivery_date)}
+                  </p>
+                )}
+                {order.discount_code && (
+                  <p className="mb-1 text-sm text-brown-800/70">
+                    <span className="font-medium">Descuento:</span>{" "}
+                    {order.discount_code} (-{formatPrice(order.discount_amount)})
+                  </p>
+                )}
                 {order.notes && (
                   <p className="mb-3 text-sm text-brown-800/70">
                     <span className="font-medium">Notas:</span> {order.notes}

@@ -36,6 +36,7 @@ create table if not exists products (
   price numeric(12,2) not null default 0,
   promo_price numeric(12,2), -- si tiene valor, se muestra como oferta
   promo_active boolean not null default false,
+  sizes jsonb not null default '[]'::jsonb, -- [{ "label": "Chico", "price": 10000 }, ...] — si está vacío, se usa size_label/price de arriba
   images text[] not null default '{}', -- urls (Supabase Storage o externas)
   position integer not null default 0,
   active boolean not null default true,
@@ -82,7 +83,24 @@ create table if not exists orders (
   items jsonb not null default '[]',
   total numeric(12,2) not null default 0,
   status text not null default 'nuevo', -- 'nuevo' | 'confirmado' | 'entregado' | 'cancelado'
-  notes text default ''
+  notes text default '',
+  delivery_date date,
+  discount_code text,
+  discount_amount numeric(12,2) not null default 0
+);
+
+-- ----------------------------------------------------------------------------
+-- Códigos de descuento (se gestionan desde el panel de administrador)
+-- ----------------------------------------------------------------------------
+create table if not exists discount_codes (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,
+  type text not null default 'percent', -- 'percent' | 'fixed'
+  value numeric(12,2) not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  constraint discount_codes_type_check check (type in ('percent', 'fixed')),
+  constraint discount_codes_value_check check (value > 0)
 );
 
 -- ----------------------------------------------------------------------------
@@ -108,6 +126,7 @@ alter table categories enable row level security;
 alter table products enable row level security;
 alter table site_settings enable row level security;
 alter table orders enable row level security;
+alter table discount_codes enable row level security;
 
 -- Lectura pública: cualquiera puede ver categorías activas y productos activos
 drop policy if exists "public read active categories" on categories;
@@ -135,6 +154,13 @@ on orders for insert
 to anon
 with check (true);
 
+-- Cualquiera puede leer códigos de descuento activos (para validarlos en el carrito)
+drop policy if exists "public read active discount codes" on discount_codes;
+create policy "public read active discount codes"
+on discount_codes for select
+to anon
+using (active = true);
+
 -- Admin autenticado: acceso total a todo
 drop policy if exists "admin full access categories" on categories;
 create policy "admin full access categories"
@@ -160,6 +186,13 @@ with check (true);
 drop policy if exists "admin full access orders" on orders;
 create policy "admin full access orders"
 on orders for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "admin full access discount codes" on discount_codes;
+create policy "admin full access discount codes"
+on discount_codes for all
 to authenticated
 using (true)
 with check (true);

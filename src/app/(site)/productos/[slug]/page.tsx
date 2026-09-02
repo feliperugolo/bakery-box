@@ -22,10 +22,15 @@ export default async function ProductDetailPage({
     .filter((p) => p.category_id === product.category_id && p.id !== product.id)
     .slice(0, 4);
 
+  const hasSizes = product.sizes && product.sizes.length > 0;
   const hasPromo =
+    !hasSizes &&
     product.promo_active &&
     product.promo_price != null &&
     product.promo_price < product.price;
+  const sizePrices = hasSizes ? product.sizes.map((s) => s.price) : [];
+  const minSizePrice = hasSizes ? Math.min(...sizePrices) : null;
+  const maxSizePrice = hasSizes ? Math.max(...sizePrices) : null;
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-10 md:px-8 md:py-14">
@@ -48,13 +53,23 @@ export default async function ProductDetailPage({
           )}
 
           <div className="mt-4 flex items-baseline gap-3">
-            <span className="font-display text-3xl text-brown-900">
-              {formatPrice(hasPromo ? product.promo_price! : product.price)}
-            </span>
-            {hasPromo && (
-              <span className="text-lg text-brown-800/40 line-through">
-                {formatPrice(product.price)}
+            {hasSizes ? (
+              <span className="text-3xl font-semibold text-brown-900">
+                {minSizePrice === maxSizePrice
+                  ? formatPrice(minSizePrice!)
+                  : `Desde ${formatPrice(minSizePrice!)}`}
               </span>
+            ) : (
+              <>
+                <span className="text-3xl font-semibold text-brown-900">
+                  {formatPrice(hasPromo ? product.promo_price! : product.price)}
+                </span>
+                {hasPromo && (
+                  <span className="text-lg text-brown-800/40 line-through">
+                    {formatPrice(product.price)}
+                  </span>
+                )}
+              </>
             )}
           </div>
 

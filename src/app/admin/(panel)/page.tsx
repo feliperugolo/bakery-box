@@ -76,7 +76,7 @@ export default async function AdminDashboardPage() {
                     {new Date(order.created_at).toLocaleString("es-AR")}
                   </p>
                 </div>
-                <span className="font-display text-lg text-brown-900">
+                <span className="text-lg font-semibold text-brown-900">
                   {formatPrice(order.total)}
                 </span>
               </li>

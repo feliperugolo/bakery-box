@@ -68,7 +68,7 @@ export default function CartDrawer() {
               <ul className="flex flex-col gap-4">
                 {items.map((item) => (
                   <li
-                    key={item.productId}
+                    key={`${item.productId}::${item.sizeLabel}`}
                     className="flex gap-3 border-b border-brown-900/10 pb-4"
                   >
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-cream-dark">
@@ -88,7 +88,7 @@ export default function CartDrawer() {
                           {item.name}
                         </p>
                         <button
-                          onClick={() => removeItem(item.productId)}
+                          onClick={() => removeItem(item.productId, item.sizeLabel)}
                           aria-label="Quitar"
                           className="shrink-0 text-brown-800/40 hover:text-red-600"
                         >
@@ -103,7 +103,7 @@ export default function CartDrawer() {
                           <button
                             className="flex h-7 w-7 items-center justify-center text-brown-800"
                             onClick={() =>
-                              setQuantity(item.productId, item.quantity - 1)
+                              setQuantity(item.productId, item.sizeLabel, item.quantity - 1)
                             }
                             aria-label="Restar"
                           >
@@ -115,7 +115,7 @@ export default function CartDrawer() {
                           <button
                             className="flex h-7 w-7 items-center justify-center text-brown-800"
                             onClick={() =>
-                              setQuantity(item.productId, item.quantity + 1)
+                              setQuantity(item.productId, item.sizeLabel, item.quantity + 1)
                             }
                             aria-label="Sumar"
                           >
@@ -135,7 +135,7 @@ export default function CartDrawer() {
             <div className="border-t border-brown-900/10 px-5 py-5">
               <div className="mb-4 flex items-center justify-between text-base">
                 <span className="text-brown-800">Total</span>
-                <span className="font-display text-2xl text-brown-900">
+                <span className="text-2xl font-semibold text-brown-900">
                   {formatPrice(total)}
                 </span>
               </div>

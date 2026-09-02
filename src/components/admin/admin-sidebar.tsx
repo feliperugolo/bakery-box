@@ -11,6 +11,7 @@ import {
   Settings,
   LogOut,
   ExternalLink,
+  Tag,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -18,6 +19,7 @@ const links = [
   { href: "/admin", label: "Resumen", icon: LayoutDashboard },
   { href: "/admin/productos", label: "Productos", icon: Cake },
   { href: "/admin/categorias", label: "Categorías", icon: Tags },
+  { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
   { href: "/admin/pedidos", label: "Pedidos", icon: ClipboardList },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings },
 ];

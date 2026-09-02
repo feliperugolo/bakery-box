@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { seedCategories, seedProducts } from "@/lib/seed-data";
-import { Category, Order, Product, SiteSettings } from "@/lib/types";
+import { Category, DiscountCode, Order, Product, SiteSettings } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/supabase-config";
 
 export { isSupabaseConfigured };
@@ -123,6 +123,19 @@ export async function getAllOrdersAdmin(limit?: number): Promise<Order[]> {
   const { data, error } = await query;
   if (error || !data) return [];
   return data as Order[];
+}
+
+export async function getAllDiscountCodesAdmin(): Promise<DiscountCode[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("discount_codes")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data as DiscountCode[];
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {

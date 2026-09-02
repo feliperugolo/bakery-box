@@ -3,14 +3,15 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Copy, Check } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Copy, Check, Tag, X } from "lucide-react";
 import { useCartStore, cartTotal } from "@/lib/cart-store";
 import { formatPrice } from "@/lib/format";
 import { buildWhatsappMessage, whatsappLink } from "@/lib/whatsapp";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured as supabaseConfigured } from "@/lib/supabase-config";
 import { useHasMounted } from "@/lib/use-has-mounted";
-import { DeliveryMethod, PaymentMethod, SiteSettings } from "@/lib/types";
+import { getDeliveryDayOptions } from "@/lib/delivery";
+import { DeliveryMethod, DiscountCode, PaymentMethod, SiteSettings } from "@/lib/types";
 
 export default function CartPageClient({ settings }: { settings: SiteSettings }) {
   const mounted = useHasMounted();
@@ -23,19 +24,75 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
   const [phone, setPhone] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("retiro");
   const [address, setAddress] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const total = cartTotal(items);
+  const [discountInput, setDiscountInput] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState<DiscountCode | null>(null);
+  const [discountChecking, setDiscountChecking] = useState(false);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+
+  const deliveryDayOptions = getDeliveryDayOptions();
+
+  const subtotal = cartTotal(items);
+  const discountAmount = appliedDiscount
+    ? Math.min(
+        subtotal,
+        appliedDiscount.type === "percent"
+          ? Math.round((subtotal * appliedDiscount.value) / 100)
+          : appliedDiscount.value
+      )
+    : 0;
+  const total = subtotal - discountAmount;
 
   const copyToClipboard = (value: string, key: string) => {
     navigator.clipboard.writeText(value).then(() => {
       setCopied(key);
       setTimeout(() => setCopied(null), 1500);
     });
+  };
+
+  const applyDiscount = async () => {
+    setDiscountError(null);
+    const code = discountInput.trim();
+    if (!code) return;
+
+    if (!supabaseConfigured) {
+      setDiscountError("Los códigos de descuento no están disponibles ahora.");
+      return;
+    }
+
+    setDiscountChecking(true);
+    try {
+      const supabase = createClient();
+      const { data, error: dbError } = await supabase
+        .from("discount_codes")
+        .select("*")
+        .ilike("code", code)
+        .eq("active", true)
+        .maybeSingle();
+
+      if (dbError || !data) {
+        setDiscountError("Ese código no existe o ya no está activo.");
+        setAppliedDiscount(null);
+      } else {
+        setAppliedDiscount(data as DiscountCode);
+      }
+    } catch {
+      setDiscountError("No pudimos validar el código. Probá de nuevo.");
+    } finally {
+      setDiscountChecking(false);
+    }
+  };
+
+  const removeDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountInput("");
+    setDiscountError(null);
   };
 
   const handleSubmit = async () => {
@@ -54,16 +111,24 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
       setError("Necesitamos la dirección para el envío.");
       return;
     }
+    if (!deliveryDate) {
+      setError("Elegí un día de entrega.");
+      return;
+    }
 
     setSubmitting(true);
 
     const message = buildWhatsappMessage({
       items,
+      subtotal,
       total,
       customerName: name.trim(),
       deliveryMethod,
       address: address.trim(),
+      deliveryDate,
       paymentMethod,
+      discountCode: appliedDiscount?.code,
+      discountAmount,
       notes: notes.trim(),
     });
 
@@ -75,6 +140,7 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
           customer_phone: phone.trim(),
           delivery_method: deliveryMethod,
           address: address.trim(),
+          delivery_date: deliveryDate,
           payment_method: paymentMethod,
           items: items.map((i) => ({
             product_id: i.productId,
@@ -84,6 +150,8 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
             size_label: i.sizeLabel,
           })),
           total,
+          discount_code: appliedDiscount?.code || null,
+          discount_amount: discountAmount,
           notes: notes.trim(),
         });
       } catch {
@@ -131,7 +199,7 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
           <ul className="flex flex-col gap-4">
             {items.map((item) => (
               <li
-                key={item.productId}
+                key={`${item.productId}::${item.sizeLabel}`}
                 className="flex gap-4 rounded-2xl bg-paper p-4 shadow-[0_1px_3px_rgba(74,46,24,0.08)]"
               >
                 <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-cream-dark">
@@ -158,7 +226,7 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
                       )}
                     </div>
                     <button
-                      onClick={() => removeItem(item.productId)}
+                      onClick={() => removeItem(item.productId, item.sizeLabel)}
                       aria-label="Quitar"
                       className="shrink-0 text-brown-800/40 hover:text-red-600"
                     >
@@ -169,7 +237,9 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
                     <div className="flex items-center gap-2 rounded-full border border-brown-900/15 px-1">
                       <button
                         className="flex h-8 w-8 items-center justify-center text-brown-800"
-                        onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                        onClick={() =>
+                          setQuantity(item.productId, item.sizeLabel, item.quantity - 1)
+                        }
                         aria-label="Restar"
                       >
                         <Minus className="h-3.5 w-3.5" />
@@ -177,13 +247,15 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
                       <span className="w-5 text-center text-sm">{item.quantity}</span>
                       <button
                         className="flex h-8 w-8 items-center justify-center text-brown-800"
-                        onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                        onClick={() =>
+                          setQuantity(item.productId, item.sizeLabel, item.quantity + 1)
+                        }
                         aria-label="Sumar"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    <span className="font-display text-lg text-brown-900">
+                    <span className="text-lg font-semibold text-brown-900">
                       {formatPrice(item.price * item.quantity)}
                     </span>
                   </div>
@@ -202,11 +274,70 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
 
         {/* Checkout */}
         <div className="h-fit rounded-2xl bg-paper p-6 shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
-          <div className="flex items-center justify-between border-b border-brown-900/10 pb-4">
-            <span className="text-brown-800">Total</span>
-            <span className="font-display text-2xl text-brown-900">
-              {formatPrice(total)}
-            </span>
+          {/* Código de descuento */}
+          <div>
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-brown-800">
+              <Tag className="h-3.5 w-3.5" /> Código de descuento
+            </p>
+            {appliedDiscount ? (
+              <div className="flex items-center justify-between rounded-xl bg-gold-500/10 px-4 py-2.5 text-sm">
+                <span className="font-medium text-brown-900">
+                  {appliedDiscount.code} aplicado (
+                  {appliedDiscount.type === "percent"
+                    ? `${appliedDiscount.value}%`
+                    : formatPrice(appliedDiscount.value)}
+                  )
+                </span>
+                <button
+                  onClick={removeDiscount}
+                  aria-label="Quitar código"
+                  className="text-brown-800/50 hover:text-red-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === "Enter" && applyDiscount()}
+                  placeholder="Ingresá tu código"
+                  className="w-full rounded-xl border border-brown-900/15 bg-cream px-4 py-2.5 text-sm text-brown-900 outline-none focus:border-gold-500"
+                />
+                <button
+                  onClick={applyDiscount}
+                  disabled={discountChecking || !discountInput.trim()}
+                  className="shrink-0 rounded-xl bg-brown-900 px-4 py-2.5 text-sm font-semibold text-cream transition hover:bg-brown-800 disabled:opacity-60"
+                >
+                  {discountChecking ? "..." : "Aplicar"}
+                </button>
+              </div>
+            )}
+            {discountError && (
+              <p className="mt-1.5 text-xs text-red-600">{discountError}</p>
+            )}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-1 border-b border-brown-900/10 pb-4">
+            {discountAmount > 0 && (
+              <>
+                <div className="flex items-center justify-between text-sm text-brown-800/70">
+                  <span>Subtotal</span>
+                  <span>{formatPrice(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm text-gold-500">
+                  <span>Descuento</span>
+                  <span>-{formatPrice(discountAmount)}</span>
+                </div>
+              </>
+            )}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-brown-800">Total</span>
+              <span className="text-2xl font-semibold text-brown-900">
+                {formatPrice(total)}
+              </span>
+            </div>
           </div>
 
           <div className="mt-5 flex flex-col gap-4">
@@ -277,6 +408,27 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
                   {settings.delivery_note}
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-brown-800">
+                Día de entrega
+              </label>
+              <select
+                value={deliveryDate}
+                onChange={(e) => setDeliveryDate(e.target.value)}
+                className="w-full rounded-xl border border-brown-900/15 bg-cream px-4 py-2.5 text-sm text-brown-900 outline-none focus:border-gold-500"
+              >
+                <option value="">Elegí un día</option>
+                {deliveryDayOptions.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-brown-800/50">
+                Entregas disponibles de lunes a sábados.
+              </p>
             </div>
 
             <div>

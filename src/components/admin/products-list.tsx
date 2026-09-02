@@ -136,7 +136,7 @@ function SortableRow({
         <p className="text-xs text-brown-800/50">{categoryName}</p>
       </div>
 
-      <span className="hidden shrink-0 font-display text-brown-900 sm:block">
+      <span className="hidden shrink-0 font-semibold text-brown-900 sm:block">
         {formatPrice(product.promo_active && product.promo_price ? product.promo_price : product.price)}
       </span>
 

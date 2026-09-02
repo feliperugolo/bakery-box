@@ -12,9 +12,13 @@ export default async function Home() {
     getProducts(),
   ]);
 
+  const heroImages = allProducts
+    .filter((p) => p.images[0])
+    .map((p) => ({ src: p.images[0], alt: p.name }));
+
   return (
     <>
-      <Hero />
+      <Hero images={heroImages} />
 
       <section id="destacados" className="mx-auto max-w-6xl px-5 py-20 md:px-8">
         <SectionHeading

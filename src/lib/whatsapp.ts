@@ -1,24 +1,33 @@
 import { CartItem } from "./cart-store";
 import { formatPrice } from "./format";
+import { formatDeliveryDate } from "./delivery";
 import { DeliveryMethod, PaymentMethod } from "./types";
 
 type BuildMessageArgs = {
   items: CartItem[];
+  subtotal: number;
   total: number;
   customerName: string;
   deliveryMethod: DeliveryMethod;
   address: string;
+  deliveryDate: string;
   paymentMethod: PaymentMethod;
+  discountCode?: string;
+  discountAmount?: number;
   notes?: string;
 };
 
 export function buildWhatsappMessage({
   items,
+  subtotal,
   total,
   customerName,
   deliveryMethod,
   address,
+  deliveryDate,
   paymentMethod,
+  discountCode,
+  discountAmount,
   notes,
 }: BuildMessageArgs) {
   const lines: string[] = [];
@@ -34,6 +43,10 @@ export function buildWhatsappMessage({
     );
   }
   lines.push("");
+  if (discountAmount && discountAmount > 0) {
+    lines.push(`Subtotal: ${formatPrice(subtotal)}`);
+    lines.push(`Descuento (${discountCode}): -${formatPrice(discountAmount)}`);
+  }
   lines.push(`*Total: ${formatPrice(total)}*`);
   lines.push("");
   lines.push(`*Nombre:* ${customerName}`);
@@ -42,6 +55,9 @@ export function buildWhatsappMessage({
   );
   if (deliveryMethod === "delivery" && address) {
     lines.push(`*Dirección:* ${address}`);
+  }
+  if (deliveryDate) {
+    lines.push(`*Día de entrega:* ${formatDeliveryDate(deliveryDate)}`);
   }
   lines.push(
     `*Forma de pago:* ${

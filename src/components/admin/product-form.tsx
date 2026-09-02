@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Category, Product } from "@/lib/types";
+import { Category, Product, ProductSize } from "@/lib/types";
 import ImageUploader from "./image-uploader";
 
 const DIACRITICS_REGEX = new RegExp("[\\u0300-\\u036f]", "g");
@@ -39,6 +39,7 @@ export default function ProductForm({
     product?.promo_price != null ? String(product.promo_price) : ""
   );
   const [promoActive, setPromoActive] = useState(product?.promo_active || false);
+  const [sizes, setSizes] = useState<ProductSize[]>(product?.sizes || []);
   const [images, setImages] = useState<string[]>(product?.images || []);
   const [active, setActive] = useState(product?.active ?? true);
   const [featured, setFeatured] = useState(product?.featured || false);
@@ -50,12 +51,29 @@ export default function ProductForm({
     if (!slugTouched) setSlug(slugify(value));
   };
 
+  const addSizeRow = () => setSizes((prev) => [...prev, { label: "", price: 0 }]);
+
+  const updateSizeRow = (index: number, patch: Partial<ProductSize>) =>
+    setSizes((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+
+  const removeSizeRow = (index: number) =>
+    setSizes((prev) => prev.filter((_, i) => i !== index));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!name.trim() || !slug.trim() || !price) {
       setError("Completá al menos nombre, slug y precio.");
+      return;
+    }
+
+    const cleanSizes = sizes
+      .map((s) => ({ label: s.label.trim(), price: Number(s.price) }))
+      .filter((s) => s.label);
+
+    if (sizes.length > 0 && cleanSizes.length !== sizes.length) {
+      setError("Completá la etiqueta de todos los tamaños o eliminá los vacíos.");
       return;
     }
 
@@ -72,6 +90,7 @@ export default function ProductForm({
       promo_price: promoPrice ? Number(promoPrice) : null,
       promo_active: promoActive,
       images,
+      sizes: cleanSizes,
       active,
       featured,
     };
@@ -204,6 +223,55 @@ export default function ProductForm({
               className="w-full rounded-xl border border-brown-900/15 bg-cream px-4 py-2.5 text-sm outline-none focus:border-gold-500"
               placeholder="0"
             />
+          </div>
+        </div>
+        {sizes.length > 0 && (
+          <p className="-mt-2 text-xs text-brown-800/50">
+            Si cargás tamaños abajo, el cliente elige entre ellos y estos
+            precios de arriba no se usan.
+          </p>
+        )}
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-brown-800">
+            Tamaños (opcional, ej: Chico / Grande con precios distintos)
+          </label>
+          <div className="flex flex-col gap-2">
+            {sizes.map((size, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  value={size.label}
+                  onChange={(e) => updateSizeRow(i, { label: e.target.value })}
+                  placeholder="Ej: Chico"
+                  className="flex-1 rounded-xl border border-brown-900/15 bg-cream px-4 py-2.5 text-sm outline-none focus:border-gold-500"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  value={size.price}
+                  onChange={(e) =>
+                    updateSizeRow(i, { price: Number(e.target.value) })
+                  }
+                  placeholder="Precio"
+                  className="w-32 rounded-xl border border-brown-900/15 bg-cream px-4 py-2.5 text-sm outline-none focus:border-gold-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeSizeRow(i)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cream-dark text-red-500 hover:bg-red-50"
+                  aria-label="Eliminar tamaño"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addSizeRow}
+              className="flex w-fit items-center gap-1.5 rounded-xl border border-dashed border-brown-900/25 px-4 py-2 text-sm font-medium text-brown-800 hover:border-gold-500 hover:text-gold-500"
+            >
+              <Plus className="h-4 w-4" /> Agregar tamaño
+            </button>
           </div>
         </div>
 

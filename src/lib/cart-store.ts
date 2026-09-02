@@ -13,12 +13,20 @@ export type CartItem = {
   quantity: number;
 };
 
+// Un mismo producto puede estar en el carrito más de una vez si se
+// eligieron tamaños distintos (ej: Chico y Grande), así que la identidad
+// de una línea del carrito es la combinación producto + tamaño, no solo
+// el producto.
+function lineKey(productId: string, sizeLabel: string) {
+  return `${productId}::${sizeLabel}`;
+}
+
 type CartState = {
   items: CartItem[];
   isOpen: boolean;
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
-  removeItem: (productId: string) => void;
-  setQuantity: (productId: string, quantity: number) => void;
+  removeItem: (productId: string, sizeLabel: string) => void;
+  setQuantity: (productId: string, sizeLabel: string, quantity: number) => void;
   clear: () => void;
   open: () => void;
   close: () => void;
@@ -32,11 +40,14 @@ export const useCartStore = create<CartState>()(
       isOpen: false,
       addItem: (item, quantity = 1) => {
         const items = get().items;
-        const existing = items.find((i) => i.productId === item.productId);
+        const key = lineKey(item.productId, item.sizeLabel);
+        const existing = items.find(
+          (i) => lineKey(i.productId, i.sizeLabel) === key
+        );
         if (existing) {
           set({
             items: items.map((i) =>
-              i.productId === item.productId
+              lineKey(i.productId, i.sizeLabel) === key
                 ? { ...i, quantity: i.quantity + quantity }
                 : i
             ),
@@ -46,16 +57,23 @@ export const useCartStore = create<CartState>()(
         }
         set({ isOpen: true });
       },
-      removeItem: (productId) =>
-        set({ items: get().items.filter((i) => i.productId !== productId) }),
-      setQuantity: (productId, quantity) => {
+      removeItem: (productId, sizeLabel) => {
+        const key = lineKey(productId, sizeLabel);
+        set({
+          items: get().items.filter((i) => lineKey(i.productId, i.sizeLabel) !== key),
+        });
+      },
+      setQuantity: (productId, sizeLabel, quantity) => {
+        const key = lineKey(productId, sizeLabel);
         if (quantity <= 0) {
-          set({ items: get().items.filter((i) => i.productId !== productId) });
+          set({
+            items: get().items.filter((i) => lineKey(i.productId, i.sizeLabel) !== key),
+          });
           return;
         }
         set({
           items: get().items.map((i) =>
-            i.productId === productId ? { ...i, quantity } : i
+            lineKey(i.productId, i.sizeLabel) === key ? { ...i, quantity } : i
           ),
         });
       },

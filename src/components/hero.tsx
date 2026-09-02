@@ -4,14 +4,46 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+export type HeroImage = {
+  src: string;
+  alt: string;
+};
+
+const FALLBACK_IMAGE: HeroImage = {
+  src: "/images/products/torta-mousse-chocolate-garrapinada.webp",
+  alt: "Bakery Box",
+};
+
+const SLIDE_INTERVAL_MS = 3000;
+
 /**
  * Hero con una torta que se desplaza, rota y escala a medida que el usuario
  * scrollea. La sección mide 200vh: el primer 100vh es el "viaje" de la
  * torta y el contenido, después se asienta en su posición final.
+ *
+ * Las imágenes van rotando cada 3 segundos con un fundido cruzado. La
+ * lista de imágenes se arma en el servidor a partir de los productos
+ * activos, así que apenas se suma un producto nuevo con foto, su imagen
+ * se incorpora automáticamente al banner.
  */
-export default function Hero() {
+export default function Hero({ images }: { images: HeroImage[] }) {
   const sectionRef = useRef<HTMLElement>(null);
   const [progress, setProgress] = useState(0);
+  const [index, setIndex] = useState(0);
+
+  const slides = images.length > 0 ? images : [FALLBACK_IMAGE];
+
+  useEffect(() => {
+    if (slides.length <= 1) return;
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % slides.length);
+    }, SLIDE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [slides.length]);
+
+  // Evita apuntar a un índice fuera de rango si la cantidad de imágenes
+  // cambia (ej: se agregó un producto nuevo y se recargó la página).
+  const activeIndex = index >= slides.length ? 0 : index;
 
   useEffect(() => {
     let raf = 0;
@@ -97,9 +129,9 @@ export default function Hero() {
               Bakery Box
             </h1>
             <p className="mx-auto mt-5 max-w-md text-balance text-base leading-relaxed text-cream/75 md:mx-0 md:text-lg">
-              Pastelería premium hecha a pedido: tortas, cheesecakes y
-              postres artesanales para regalar o darte un gusto. Pedí online
-              y coordinamos todo por WhatsApp.
+              Pastelería premium. Ideal para hacer un regalo original o
+              darte un gusto. Pedí online con 48hs de anticipación y
+              coordinamos la entrega por WhatsApp.
             </p>
             <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row md:justify-start md:items-start">
               <Link
@@ -117,7 +149,7 @@ export default function Hero() {
             </div>
           </div>
 
-          {/* Torta animada */}
+          {/* Carrusel de productos */}
           <div
             className="relative h-[260px] w-[260px] shrink-0 sm:h-[340px] sm:w-[340px] md:h-[420px] md:w-[420px]"
             style={{
@@ -126,14 +158,19 @@ export default function Hero() {
             }}
           >
             <div className="absolute inset-0 rounded-full bg-gold-400/20 blur-2xl" />
-            <Image
-              src="/images/products/torta-mousse-chocolate-garrapinada.webp"
-              alt="Torta mousse de chocolate con garrapiñada"
-              fill
-              sizes="(min-width: 768px) 420px, 300px"
-              className="object-contain drop-shadow-[0_25px_35px_rgba(0,0,0,0.45)]"
-              priority
-            />
+            {slides.map((slide, i) => (
+              <Image
+                key={`${slide.src}-${i}`}
+                src={slide.src}
+                alt={slide.alt}
+                fill
+                sizes="(min-width: 768px) 420px, 300px"
+                className={`object-contain drop-shadow-[0_25px_35px_rgba(0,0,0,0.45)] transition-opacity duration-1000 ${
+                  i === activeIndex ? "opacity-100" : "opacity-0"
+                }`}
+                priority={i === 0}
+              />
+            ))}
           </div>
         </div>
 

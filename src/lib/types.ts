@@ -7,6 +7,11 @@ export type Category = {
   created_at: string;
 };
 
+export type ProductSize = {
+  label: string;
+  price: number;
+};
+
 export type Product = {
   id: string;
   category_id: string | null;
@@ -18,6 +23,7 @@ export type Product = {
   promo_price: number | null;
   promo_active: boolean;
   images: string[];
+  sizes: ProductSize[];
   position: number;
   active: boolean;
   featured: boolean;
@@ -66,4 +72,18 @@ export type Order = {
   total: number;
   status: "nuevo" | "confirmado" | "entregado" | "cancelado";
   notes: string;
+  delivery_date: string | null;
+  discount_code: string | null;
+  discount_amount: number;
+};
+
+export type DiscountType = "percent" | "fixed";
+
+export type DiscountCode = {
+  id: string;
+  code: string;
+  type: DiscountType;
+  value: number;
+  active: boolean;
+  created_at: string;
 };
