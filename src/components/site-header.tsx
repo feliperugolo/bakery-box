@@ -69,6 +69,12 @@ export default function SiteHeader({
               {cat.name}
             </Link>
           ))}
+          <Link
+            href="/mayorista"
+            className="text-sm font-medium tracking-wide text-brown-800 transition hover:text-gold-500"
+          >
+            Mayorista
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -118,6 +124,13 @@ export default function SiteHeader({
               {cat.name}
             </Link>
           ))}
+          <Link
+            href="/mayorista"
+            className="rounded-lg px-3 py-2.5 text-sm font-medium text-brown-800 hover:bg-cream-dark"
+            onClick={() => setMobileOpen(false)}
+          >
+            Mayorista
+          </Link>
         </nav>
       )}
     </header>

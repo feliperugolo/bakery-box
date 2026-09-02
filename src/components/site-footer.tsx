@@ -73,6 +73,11 @@ export default function SiteFooter({ settings }: { settings: SiteSettings }) {
                 Mi carrito
               </Link>
             </li>
+            <li>
+              <Link href="/mayorista" className="hover:text-gold-300">
+                Mayorista
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
