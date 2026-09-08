@@ -11,10 +11,28 @@ import "@fontsource/playfair-display/800.css";
 import "@fontsource/alex-brush/400.css";
 import "./globals.css";
 
+const siteUrl = "https://bakery-box.netlify.app";
+const siteTitle = "Bakery Box | Pastelería premium";
+const siteDescription =
+  "Tortas, Cuadrados dulces, Postres artesanales y mucho más. Pedí online y recibilo en la puerta de tu casa o retiralo por nuestro pick up point en Bella Vista.";
+
 export const metadata: Metadata = {
-  title: "Bakery Box | Pastelería premium a pedido",
-  description:
-    "Tortas, cheesecakes y postres artesanales hechos a pedido en Bakery Box by Lunch Box. Pedí online, pagá por transferencia o efectivo, retirá o recibí por delivery.",
+  metadataBase: new URL(siteUrl),
+  title: siteTitle,
+  description: siteDescription,
+  openGraph: {
+    title: siteTitle,
+    description: siteDescription,
+    url: siteUrl,
+    siteName: "Bakery Box",
+    locale: "es_AR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteTitle,
+    description: siteDescription,
+  },
 };
 
 export default function RootLayout({
