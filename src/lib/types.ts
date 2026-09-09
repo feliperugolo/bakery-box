@@ -88,3 +88,27 @@ export type DiscountCode = {
   active: boolean;
   created_at: string;
 };
+
+export type WhatsappSender = "customer" | "bot" | "admin";
+export type WhatsappDirection = "inbound" | "outbound";
+
+export type WhatsappConversation = {
+  id: string;
+  phone_number: string;
+  customer_name: string;
+  last_message_at: string;
+  last_message_preview: string;
+  bot_paused: boolean;
+  unread_count: number;
+  created_at: string;
+};
+
+export type WhatsappMessage = {
+  id: string;
+  conversation_id: string;
+  direction: WhatsappDirection;
+  sender: WhatsappSender;
+  body: string;
+  wa_message_id: string | null;
+  created_at: string;
+};

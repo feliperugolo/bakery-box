@@ -1,6 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { seedCategories, seedProducts } from "@/lib/seed-data";
-import { Category, DiscountCode, Order, Product, SiteSettings } from "@/lib/types";
+import {
+  Category,
+  DiscountCode,
+  Order,
+  Product,
+  SiteSettings,
+  WhatsappConversation,
+  WhatsappMessage,
+} from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/supabase-config";
 
 export { isSupabaseConfigured };
@@ -150,4 +158,33 @@ export async function getSiteSettings(): Promise<SiteSettings> {
 
   if (error || !data) return defaultSettings;
   return data as SiteSettings;
+}
+
+export async function getAllWhatsappConversationsAdmin(): Promise<WhatsappConversation[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("whatsapp_conversations")
+    .select("*")
+    .order("last_message_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data as WhatsappConversation[];
+}
+
+export async function getWhatsappMessagesAdmin(
+  conversationId: string
+): Promise<WhatsappMessage[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("whatsapp_messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+
+  if (error || !data) return [];
+  return data as WhatsappMessage[];
 }

@@ -316,3 +316,66 @@ from (values
 ) as v(cat_slug, name, slug, description, size_label, price, promo_price, promo_active, images, position, featured)
 join categories c on c.slug = v.cat_slug
 on conflict (slug) do nothing;
+
+-- ============================================================================
+-- Bot de WhatsApp: conversaciones y mensajes
+-- ============================================================================
+-- Guarda el historial de charlas por WhatsApp (una fila por número de
+-- teléfono) y cada mensaje individual, tanto los que manda el cliente como
+-- los que responde el bot o el administrador a mano desde el panel.
+create table if not exists whatsapp_conversations (
+  id uuid primary key default gen_random_uuid(),
+  phone_number text not null unique, -- número del cliente, solo dígitos (formato wa: 549...)
+  customer_name text default '',
+  last_message_at timestamptz not null default now(),
+  last_message_preview text default '',
+  bot_paused boolean not null default false, -- true = el admin tomó la conversación a mano
+  unread_count integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists whatsapp_conversations_last_message_idx
+  on whatsapp_conversations(last_message_at desc);
+
+create table if not exists whatsapp_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references whatsapp_conversations(id) on delete cascade,
+  direction text not null, -- 'inbound' (del cliente) | 'outbound' (del bot o admin)
+  sender text not null default 'customer', -- 'customer' | 'bot' | 'admin'
+  body text not null default '',
+  wa_message_id text, -- id que asigna Meta, para no procesar el mismo mensaje 2 veces
+  created_at timestamptz not null default now(),
+  constraint whatsapp_messages_direction_check check (direction in ('inbound', 'outbound')),
+  constraint whatsapp_messages_sender_check check (sender in ('customer', 'bot', 'admin'))
+);
+
+create index if not exists whatsapp_messages_conversation_idx
+  on whatsapp_messages(conversation_id, created_at);
+
+create unique index if not exists whatsapp_messages_wa_message_id_idx
+  on whatsapp_messages(wa_message_id) where wa_message_id is not null;
+
+alter table whatsapp_conversations enable row level security;
+alter table whatsapp_messages enable row level security;
+
+-- Son conversaciones privadas de clientes: nada de acceso público (anon).
+-- El webhook escribe con la service role (que ignora RLS) y el panel admin
+-- lee/escribe autenticado.
+drop policy if exists "admin full access whatsapp conversations" on whatsapp_conversations;
+create policy "admin full access whatsapp conversations"
+on whatsapp_conversations for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "admin full access whatsapp messages" on whatsapp_messages;
+create policy "admin full access whatsapp messages"
+on whatsapp_messages for all
+to authenticated
+using (true)
+with check (true);
+
+-- Habilita las actualizaciones en tiempo real para que el panel admin vea
+-- los mensajes nuevos sin recargar la página.
+alter publication supabase_realtime add table whatsapp_messages;
+alter publication supabase_realtime add table whatsapp_conversations;
