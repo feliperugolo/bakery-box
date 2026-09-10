@@ -87,8 +87,13 @@ create table if not exists orders (
   notes text default '',
   delivery_date date,
   discount_code text,
-  discount_amount numeric(12,2) not null default 0
+  discount_amount numeric(12,2) not null default 0,
+  paid boolean not null default false, -- si ya se recibió el pago (transferencia confirmada o efectivo cobrado)
+  paid_at timestamptz -- cuándo se marcó como pagado
 );
+
+create index if not exists orders_delivery_date_idx on orders(delivery_date);
+create index if not exists orders_paid_idx on orders(paid);
 
 -- ----------------------------------------------------------------------------
 -- Códigos de descuento (se gestionan desde el panel de administrador)
