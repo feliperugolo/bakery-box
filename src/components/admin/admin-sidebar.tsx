@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Tag,
   MessageCircle,
+  BarChart3,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -22,6 +23,7 @@ const links = [
   { href: "/admin/categorias", label: "Categorías", icon: Tags },
   { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
   { href: "/admin/pedidos", label: "Pedidos", icon: ClipboardList },
+  { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings },
 ];
