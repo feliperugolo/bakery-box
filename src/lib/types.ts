@@ -76,6 +76,8 @@ export type Order = {
   delivery_date: string | null;
   discount_code: string | null;
   discount_amount: number;
+  paid: boolean;
+  paid_at: string | null;
 };
 
 export type DiscountType = "percent" | "fixed";
