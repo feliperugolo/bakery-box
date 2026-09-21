@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Pause, Play, Send, User, MessageCircleWarning } from "lucide-react";
+import { Bot, Pause, Play, Send, User, MessageCircleWarning, BellRing } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
 
@@ -86,10 +86,12 @@ export default function WhatsappInbox({
 
       await supabase
         .from("whatsapp_conversations")
-        .update({ unread_count: 0 })
+        .update({ unread_count: 0, needs_attention: false })
         .eq("id", selectedId);
       setConversations((prev) =>
-        prev.map((c) => (c.id === selectedId ? { ...c, unread_count: 0 } : c))
+        prev.map((c) =>
+          c.id === selectedId ? { ...c, unread_count: 0, needs_attention: false } : c
+        )
       );
     })();
 
@@ -187,15 +189,26 @@ export default function WhatsappInbox({
               <button
                 onClick={() => setSelectedId(conv.id)}
                 className={`flex w-full flex-col gap-0.5 px-4 py-3 text-left transition ${
-                  conv.id === selectedId ? "bg-cream-dark" : "hover:bg-cream-dark/60"
+                  conv.needs_attention
+                    ? "bg-red-500/5 hover:bg-red-500/10"
+                    : conv.id === selectedId
+                      ? "bg-cream-dark"
+                      : "hover:bg-cream-dark/60"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium text-brown-900">
-                    {displayName(conv)}
+                  <span className="flex min-w-0 items-center gap-1.5 truncate font-medium text-brown-900">
+                    {conv.needs_attention && (
+                      <BellRing className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                    )}
+                    <span className="truncate">{displayName(conv)}</span>
                   </span>
                   {conv.unread_count > 0 && (
-                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-gold-500 px-1 text-[11px] font-semibold text-white">
+                    <span
+                      className={`flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[11px] font-semibold text-white ${
+                        conv.needs_attention ? "bg-red-500" : "bg-gold-500"
+                      }`}
+                    >
                       {conv.unread_count}
                     </span>
                   )}

@@ -336,11 +336,14 @@ create table if not exists whatsapp_conversations (
   last_message_preview text default '',
   bot_paused boolean not null default false, -- true = el admin tomó la conversación a mano
   unread_count integer not null default 0,
+  needs_attention boolean not null default false, -- true = necesita que alguien del equipo responda
   created_at timestamptz not null default now()
 );
 
 create index if not exists whatsapp_conversations_last_message_idx
   on whatsapp_conversations(last_message_at desc);
+create index if not exists whatsapp_conversations_needs_attention_idx
+  on whatsapp_conversations(needs_attention);
 
 create table if not exists whatsapp_messages (
   id uuid primary key default gen_random_uuid(),

@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { getAllOrdersAdmin } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
-import { buildSalesReport } from "@/lib/reports";
+import { buildSalesReport, startOfWeek, startOfMonth } from "@/lib/reports";
+import ReportPdfButtons from "@/components/admin/report-pdf-buttons";
 
 export default async function ReportesPage() {
   const orders = await getAllOrdersAdmin();
@@ -23,12 +24,36 @@ export default async function ReportesPage() {
   const paidTotal = report.paidAmount + report.pendingAmount;
   const paidPct = paidTotal ? Math.round((report.paidAmount / paidTotal) * 100) : 0;
 
+  const now = new Date();
+  const weekStart = startOfWeek(now);
+  const monthStart = startOfMonth(now);
+  const weekOrders = orders.filter((o) => new Date(o.created_at) >= weekStart);
+  const monthOrders = orders.filter((o) => new Date(o.created_at) >= monthStart);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekLabel = `Semana del ${weekStart.toLocaleDateString("es-AR", { day: "numeric", month: "long" })} al ${weekEnd.toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })}`;
+  const monthLabel = monthStart
+    .toLocaleDateString("es-AR", { month: "long", year: "numeric" })
+    .replace(/^./, (c) => c.toUpperCase());
+
   return (
     <div>
-      <h1 className="font-display text-3xl text-brown-900">Reportes</h1>
-      <p className="mt-1 text-brown-800/60">
-        Ventas, cobros y productos más pedidos.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl text-brown-900">Reportes</h1>
+          <p className="mt-1 text-brown-800/60">
+            Ventas, cobros y productos más pedidos.
+          </p>
+        </div>
+        {orders.length > 0 && (
+          <ReportPdfButtons
+            weekOrders={weekOrders}
+            weekLabel={weekLabel}
+            monthOrders={monthOrders}
+            monthLabel={monthLabel}
+          />
+        )}
+      </div>
 
       {orders.length === 0 ? (
         <div className="mt-8 rounded-2xl bg-paper p-10 text-center text-brown-800/60 shadow-[0_1px_3px_rgba(74,46,24,0.08)]">

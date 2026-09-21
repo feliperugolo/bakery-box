@@ -133,6 +133,66 @@ export async function getAllOrdersAdmin(limit?: number): Promise<Order[]> {
   return data as Order[];
 }
 
+function todayStr(): string {
+  return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD en horario local
+}
+
+/**
+ * Pedidos "por delante": sin fecha de entrega asignada todavía, o con fecha
+ * de hoy en adelante. Es lo que necesita ver el equipo de cocina para armar
+ * los pedidos. Una vez que pasa la fecha de entrega, el pedido deja de
+ * aparecer acá y pasa al historial.
+ */
+export async function getUpcomingOrdersAdmin(): Promise<Order[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .or(`delivery_date.is.null,delivery_date.gte.${todayStr()}`)
+    .order("delivery_date", { ascending: true, nullsFirst: true })
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data as Order[];
+}
+
+/**
+ * Historial: pedidos cuya fecha de entrega ya pasó. Por defecto trae los
+ * últimos 30 días para no traer toda la tabla; se puede pedir un rango
+ * puntual (from/to, formato YYYY-MM-DD) para buscar pedidos más viejos.
+ */
+export async function getOrderHistoryAdmin(range?: {
+  from?: string;
+  to?: string;
+}): Promise<Order[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const supabase = await createClient();
+  const today = todayStr();
+
+  let from = range?.from;
+  const to = range?.to && range.to < today ? range.to : today;
+  if (!from) {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    from = d.toLocaleDateString("en-CA");
+  }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .lt("delivery_date", today)
+    .gte("delivery_date", from)
+    .lte("delivery_date", to)
+    .order("delivery_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data as Order[];
+}
+
 export async function getAllDiscountCodesAdmin(): Promise<DiscountCode[]> {
   if (!isSupabaseConfigured) return [];
 

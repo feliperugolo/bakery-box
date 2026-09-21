@@ -68,6 +68,41 @@ export const CREATE_ORDER_TOOL: Anthropic.Tool = {
   },
 };
 
+export const NOTIFY_TEAM_TOOL: Anthropic.Tool = {
+  name: "notify_team",
+  description:
+    "Marca esta conversación para que un humano del equipo de Bakery Box la revise y responda. Usalo SIEMPRE que le digas al cliente que el equipo lo va a contactar (reclamos, pedidos de diseño muy especiales, dudas mayoristas que requieren seguimiento, o cualquier cosa que no puedas resolver vos). No hace falta esperar respuesta del cliente para llamarlo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      reason: {
+        type: "string",
+        description: "Resumen breve de por qué esta charla necesita a un humano.",
+      },
+    },
+    required: ["reason"],
+  },
+};
+
+type NotifyTeamInput = { reason?: string };
+
+export async function runNotifyTeam(
+  supabase: AnySupabaseClient,
+  customerPhone: string,
+  input: NotifyTeamInput
+): Promise<string> {
+  const { error } = await supabase
+    .from("whatsapp_conversations")
+    .update({ needs_attention: true })
+    .eq("phone_number", customerPhone);
+
+  if (error) {
+    return `No se pudo marcar la charla para el equipo (${error.message}), pero igual respondele al cliente con normalidad.`;
+  }
+
+  return `Listo, quedó marcada para que el equipo la revise${input.reason ? `: ${input.reason}` : ""}.`;
+}
+
 type CreateOrderInput = {
   customer_name: string;
   items: { product_slug: string; size_label?: string; quantity: number }[];

@@ -102,6 +102,7 @@ export type WhatsappConversation = {
   last_message_preview: string;
   bot_paused: boolean;
   unread_count: number;
+  needs_attention: boolean;
   created_at: string;
 };
 

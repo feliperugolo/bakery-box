@@ -70,7 +70,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (conversation.bot_paused) {
-      // El admin tomó esta conversación a mano: no contestar automáticamente.
+      // El admin tomó esta conversación a mano: no contestar automáticamente,
+      // pero sí marcarla para que el equipo vea que hay que responder.
+      await supabase
+        .from("whatsapp_conversations")
+        .update({ needs_attention: true })
+        .eq("id", conversation.id);
       return NextResponse.json({ ok: true });
     }
 
