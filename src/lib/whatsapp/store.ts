@@ -15,7 +15,7 @@ export async function getOrCreateConversation(
   supabase: AnySupabaseClient,
   phoneNumber: string,
   customerName?: string
-): Promise<WhatsappConversation> {
+): Promise<{ conversation: WhatsappConversation; isNew: boolean }> {
   const { data: existing } = await supabase
     .from("whatsapp_conversations")
     .select("*")
@@ -30,7 +30,7 @@ export async function getOrCreateConversation(
         .eq("id", existing.id);
       existing.customer_name = customerName;
     }
-    return existing as WhatsappConversation;
+    return { conversation: existing as WhatsappConversation, isNew: false };
   }
 
   const { data: created, error } = await supabase
@@ -43,7 +43,7 @@ export async function getOrCreateConversation(
     throw new Error(`No se pudo crear la conversación: ${error?.message}`);
   }
 
-  return created as WhatsappConversation;
+  return { conversation: created as WhatsappConversation, isNew: true };
 }
 
 export async function insertMessage(

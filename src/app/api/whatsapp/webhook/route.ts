@@ -21,9 +21,12 @@ const NON_TEXT_LABELS: Record<string, string> = {
   contacts: "un contacto",
 };
 
-function nonTextReply(type: string): string {
+function nonTextReply(type: string, isNewCustomer: boolean): string {
   const label = NON_TEXT_LABELS[type] || "ese tipo de mensaje";
-  return `Por ahora no puedo escuchar ni ver ${label} 🙈 ¿me lo escribís en un mensaje de texto? Así te ayudo enseguida.`;
+  const intro = isNewCustomer
+    ? "¡Hola! Soy el asistente virtual de Bakery Box 😊 "
+    : "";
+  return `${intro}Por ahora no puedo escuchar ni ver ${label} 🙈 ¿me lo escribís en un mensaje de texto? Así te ayudo enseguida.`;
 }
 
 function nonTextPreview(type: string): string {
@@ -77,7 +80,7 @@ export async function POST(request: NextRequest) {
     const text: string = isText ? message.text?.body || "" : "";
 
     const supabase = createServiceClient();
-    const conversation = await getOrCreateConversation(supabase, fromNumber, contactName);
+    const { conversation, isNew } = await getOrCreateConversation(supabase, fromNumber, contactName);
 
     const { duplicate } = await insertMessage(supabase, {
       conversationId: conversation.id,
@@ -110,7 +113,7 @@ export async function POST(request: NextRequest) {
     if (!isText) {
       // No sabemos procesar audios, imágenes, etc: avisarle al cliente que
       // nos escriba en texto en vez de dejarlo sin respuesta.
-      const replyText = nonTextReply(message.type);
+      const replyText = nonTextReply(message.type, isNew);
       const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
       await insertMessage(supabase, {
         conversationId: conversation.id,
