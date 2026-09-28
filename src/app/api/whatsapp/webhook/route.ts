@@ -5,6 +5,33 @@ import { runBotTurn } from "@/lib/whatsapp/agent";
 import { sendWhatsappMessage } from "@/lib/whatsapp/send";
 
 /**
+ * Mensajes de WhatsApp que no son texto (audio, imagen, video, documento,
+ * sticker, ubicación, etc). El bot no puede "escuchar" ni "ver" nada de
+ * esto todavía, así que en vez de quedarse mudo le avisamos al cliente y
+ * le pedimos que lo escriba.
+ */
+const NON_TEXT_LABELS: Record<string, string> = {
+  audio: "un audio",
+  voice: "un audio",
+  image: "una imagen",
+  sticker: "un sticker",
+  video: "un video",
+  document: "un archivo",
+  location: "una ubicación",
+  contacts: "un contacto",
+};
+
+function nonTextReply(type: string): string {
+  const label = NON_TEXT_LABELS[type] || "ese tipo de mensaje";
+  return `Por ahora no puedo escuchar ni ver ${label} 🙈 ¿me lo escribís en un mensaje de texto? Así te ayudo enseguida.`;
+}
+
+function nonTextPreview(type: string): string {
+  const label = NON_TEXT_LABELS[type] || "mensaje";
+  return `📎 Envió ${label}`;
+}
+
+/**
  * Verificación del webhook: Meta llama a esto una sola vez cuando configurás
  * la URL en el panel de desarrolladores, para confirmar que el endpoint es
  * tuyo. Tiene que devolver el "challenge" tal cual si el verify_token coincide.
@@ -38,15 +65,16 @@ export async function POST(request: NextRequest) {
     const message = change?.messages?.[0];
 
     // Puede llegar un evento sin mensaje (ej: confirmación de lectura) — no hay nada que hacer.
-    if (!message || message.type !== "text") {
+    if (!message) {
       return NextResponse.json({ ok: true });
     }
 
     const fromNumber: string = message.from;
-    const text: string = message.text?.body || "";
     const waMessageId: string = message.id;
     const contactName: string | undefined =
       change?.contacts?.[0]?.profile?.name;
+    const isText = message.type === "text";
+    const text: string = isText ? message.text?.body || "" : "";
 
     const supabase = createServiceClient();
     const conversation = await getOrCreateConversation(supabase, fromNumber, contactName);
@@ -55,7 +83,7 @@ export async function POST(request: NextRequest) {
       conversationId: conversation.id,
       direction: "inbound",
       sender: "customer",
-      body: text,
+      body: isText ? text : nonTextPreview(message.type),
       waMessageId,
     });
 
@@ -65,7 +93,7 @@ export async function POST(request: NextRequest) {
     }
 
     await touchConversation(supabase, conversation.id, {
-      preview: text,
+      preview: isText ? text : nonTextPreview(message.type),
       incrementUnread: true,
     });
 
@@ -76,6 +104,22 @@ export async function POST(request: NextRequest) {
         .from("whatsapp_conversations")
         .update({ needs_attention: true })
         .eq("id", conversation.id);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (!isText) {
+      // No sabemos procesar audios, imágenes, etc: avisarle al cliente que
+      // nos escriba en texto en vez de dejarlo sin respuesta.
+      const replyText = nonTextReply(message.type);
+      const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
+      await insertMessage(supabase, {
+        conversationId: conversation.id,
+        direction: "outbound",
+        sender: "bot",
+        body: replyText,
+        waMessageId: outboundId,
+      });
+      await touchConversation(supabase, conversation.id, { preview: replyText });
       return NextResponse.json({ ok: true });
     }
 
