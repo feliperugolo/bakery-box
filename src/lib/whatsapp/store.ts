@@ -120,3 +120,36 @@ export async function getRecentMessages(
 
   return (data || []).reverse();
 }
+
+// Cuántas veces seguidas tiene que repetirse el mismo mensaje del cliente
+// para asumir que no es una persona del otro lado (ej: dos bots respondiéndose
+// en bucle) y frenar al bot en vez de seguir contestando para siempre.
+const LOOP_REPEAT_THRESHOLD = 3;
+
+/**
+ * Detecta si los últimos mensajes entrantes de esta conversación son todos
+ * idénticos (el mismo texto, repetido LOOP_REPEAT_THRESHOLD veces seguidas).
+ * Esto pasa cuando del otro lado hay otro sistema automático respondiendo
+ * siempre lo mismo en vez de un cliente real — sin este freno el bot
+ * contestaría indefinidamente, gastando mensajes de WhatsApp y de la API.
+ */
+export async function isRepeatingLoop(
+  supabase: AnySupabaseClient,
+  conversationId: string,
+  incomingBody: string
+): Promise<boolean> {
+  if (!incomingBody.trim()) return false;
+
+  const { data } = await supabase
+    .from("whatsapp_messages")
+    .select("body")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(LOOP_REPEAT_THRESHOLD);
+
+  const recent = data || [];
+  if (recent.length < LOOP_REPEAT_THRESHOLD) return false;
+
+  return recent.every((m: { body: string }) => m.body === incomingBody);
+}

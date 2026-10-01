@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { getOrCreateConversation, insertMessage, touchConversation, getRecentMessages } from "@/lib/whatsapp/store";
+import {
+  getOrCreateConversation,
+  insertMessage,
+  touchConversation,
+  getRecentMessages,
+  isRepeatingLoop,
+} from "@/lib/whatsapp/store";
 import { runBotTurn } from "@/lib/whatsapp/agent";
 import { sendWhatsappMessage } from "@/lib/whatsapp/send";
 
@@ -107,6 +113,32 @@ export async function POST(request: NextRequest) {
         .from("whatsapp_conversations")
         .update({ needs_attention: true })
         .eq("id", conversation.id);
+      return NextResponse.json({ ok: true });
+    }
+
+    const inboundBody = isText ? text : nonTextPreview(message.type);
+    if (await isRepeatingLoop(supabase, conversation.id, inboundBody)) {
+      // Del otro lado hay algo (probablemente otro sistema automático, no
+      // una persona) contestando siempre lo mismo: si seguimos respondiendo
+      // quedamos en un bucle infinito entre bots. Frenamos al bot acá,
+      // mandamos un único aviso, y dejamos la charla pausada para que el
+      // equipo la revise a mano si hace falta.
+      await supabase
+        .from("whatsapp_conversations")
+        .update({ bot_paused: true, needs_attention: true })
+        .eq("id", conversation.id);
+
+      const replyText =
+        "Parece que estamos teniendo problemas para entendernos por acá. Avisé al equipo de Bakery Box para que te escriba directamente. ¡Gracias por tu paciencia!";
+      const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
+      await insertMessage(supabase, {
+        conversationId: conversation.id,
+        direction: "outbound",
+        sender: "bot",
+        body: replyText,
+        waMessageId: outboundId,
+      });
+      await touchConversation(supabase, conversation.id, { preview: replyText });
       return NextResponse.json({ ok: true });
     }
 
