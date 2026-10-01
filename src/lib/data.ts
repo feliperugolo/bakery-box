@@ -186,6 +186,7 @@ export async function getOrderHistoryAdmin(range?: {
     .lt("delivery_date", today)
     .gte("delivery_date", from)
     .lte("delivery_date", to)
+    .neq("status", "cancelado")
     .order("delivery_date", { ascending: false })
     .order("created_at", { ascending: false });
 

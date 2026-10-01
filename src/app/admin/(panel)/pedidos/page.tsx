@@ -1,8 +1,12 @@
 import OrdersManager from "@/components/admin/orders-manager";
-import { getUpcomingOrdersAdmin } from "@/lib/data";
+import { getUpcomingOrdersAdmin, getProducts, getAllDiscountCodesAdmin } from "@/lib/data";
 
 export default async function AdminOrdersPage() {
-  const orders = await getUpcomingOrdersAdmin();
+  const [orders, products, discountCodes] = await Promise.all([
+    getUpcomingOrdersAdmin(),
+    getProducts(),
+    getAllDiscountCodesAdmin(),
+  ]);
 
   return (
     <div>
@@ -12,7 +16,7 @@ export default async function AdminOrdersPage() {
         pasa la fecha de entrega, el pedido pasa solo al Historial.
       </p>
       <div className="mt-8">
-        <OrdersManager initialOrders={orders} />
+        <OrdersManager initialOrders={orders} products={products} discountCodes={discountCodes} />
       </div>
     </div>
   );

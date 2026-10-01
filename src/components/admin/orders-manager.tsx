@@ -1,17 +1,45 @@
 "use client";
 
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Order } from "@/lib/types";
+import { DiscountCode, Order, Product } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
 import { formatDeliveryDate } from "@/lib/delivery";
 import { OrderRow } from "./order-row";
 import { downloadDayOrdersPdf } from "@/lib/pdf/day-orders-pdf";
+import AddOrderModal from "./add-order-modal";
 
-export default function OrdersManager({ initialOrders }: { initialOrders: Order[] }) {
+export default function OrdersManager({
+  initialOrders,
+  products,
+  discountCodes,
+}: {
+  initialOrders: Order[];
+  products: Product[];
+  discountCodes: DiscountCode[];
+}) {
   const [orders, setOrders] = useState(initialOrders);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const createManualOrder = async (
+    payload: Omit<Order, "id" | "created_at">
+  ): Promise<string | void> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("orders")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      return error?.message || "No se pudo guardar el pedido.";
+    }
+
+    setOrders((prev) => [data as Order, ...prev]);
+    setShowAddModal(false);
+  };
 
   const updateStatus = async (order: Order, status: Order["status"]) => {
     const supabase = createClient();
@@ -29,9 +57,22 @@ export default function OrdersManager({ initialOrders }: { initialOrders: Order[
 
   if (orders.length === 0) {
     return (
-      <div className="rounded-2xl bg-paper p-10 text-center text-brown-800/60 shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
-        No hay pedidos por delante todavía. En cuanto entre uno nuevo va a
-        aparecer acá.
+      <div>
+        <div className="mb-4 flex justify-end">
+          <AddOrderButton onClick={() => setShowAddModal(true)} />
+        </div>
+        <div className="rounded-2xl bg-paper p-10 text-center text-brown-800/60 shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
+          No hay pedidos por delante todavía. En cuanto entre uno nuevo va a
+          aparecer acá.
+        </div>
+        {showAddModal && (
+          <AddOrderModal
+            products={products}
+            discountCodes={discountCodes}
+            onClose={() => setShowAddModal(false)}
+            onCreate={createManualOrder}
+          />
+        )}
       </div>
     );
   }
@@ -54,6 +95,9 @@ export default function OrdersManager({ initialOrders }: { initialOrders: Order[
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="flex justify-end">
+        <AddOrderButton onClick={() => setShowAddModal(true)} />
+      </div>
       {sortedKeys.map((key) => {
         const groupOrders = groups.get(key)!;
         const groupTotal = groupOrders
@@ -115,6 +159,27 @@ export default function OrdersManager({ initialOrders }: { initialOrders: Order[
           </section>
         );
       })}
+
+      {showAddModal && (
+        <AddOrderModal
+          products={products}
+          discountCodes={discountCodes}
+          onClose={() => setShowAddModal(false)}
+          onCreate={createManualOrder}
+        />
+      )}
     </div>
+  );
+}
+
+function AddOrderButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 rounded-full bg-brown-900 px-4 py-2 text-sm font-medium text-cream transition hover:bg-brown-800"
+    >
+      <Plus className="h-4 w-4" />
+      Agregar pedido
+    </button>
   );
 }
