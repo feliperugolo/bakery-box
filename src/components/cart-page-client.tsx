@@ -103,8 +103,13 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
       setError("Contanos tu nombre para el pedido.");
       return;
     }
+    const phoneDigits = phone.replace(/\D/g, "");
     if (!phone.trim()) {
       setError("Dejanos un teléfono de contacto.");
+      return;
+    }
+    if (phoneDigits.length < 8) {
+      setError("Revisá el teléfono, parece que le faltan números.");
       return;
     }
     if (deliveryMethod === "delivery" && !address.trim()) {
@@ -363,6 +368,9 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
                 className="w-full rounded-xl border border-brown-900/15 bg-cream px-4 py-2.5 text-sm text-brown-900 outline-none focus:border-gold-500"
                 placeholder="11 1234 5678"
               />
+              <p className="mt-1 text-xs text-brown-800/50">
+                Revisalo bien: si está mal escrito no vamos a poder contactarte.
+              </p>
             </div>
 
             <div>

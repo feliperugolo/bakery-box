@@ -232,6 +232,14 @@ export async function runCreateOrder(
     return `Error al guardar el pedido: ${error?.message}. Avisale al cliente que hubo un problema técnico y que un humano lo va a contactar.`;
   }
 
+  // El cliente acaba de dar su nombre real para el pedido — lo usamos para
+  // identificar la charla en el panel en vez del apodo de WhatsApp (que a
+  // veces no dice nada: emojis, motes, etc).
+  await supabase
+    .from("whatsapp_conversations")
+    .update({ customer_name: input.customer_name })
+    .eq("phone_number", customerPhone);
+
   const lines = resolvedItems.map(
     (i) =>
       `${i.quantity}x ${i.name}${i.size_label ? ` (${i.size_label})` : ""} — ${formatPrice(i.unit_price * i.quantity)}`
