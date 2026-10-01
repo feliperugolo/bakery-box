@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Copy, Check, Tag, X } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Copy, Check, Tag, X, MessageCircle } from "lucide-react";
 import { useCartStore, cartTotal } from "@/lib/cart-store";
 import { formatPrice } from "@/lib/format";
 import { buildWhatsappMessage, whatsappLink } from "@/lib/whatsapp";
@@ -516,6 +516,15 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
             </div>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="flex items-start gap-2 rounded-xl bg-gold-500/10 px-4 py-3 text-sm text-brown-900">
+              <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-gold-500" />
+              <p>
+                <span className="font-semibold">Para terminar tu pedido</span>,
+                enviálo por WhatsApp apretando el botón de abajo. Si no lo
+                enviás, todavía no nos llega y no queda confirmado.
+              </p>
+            </div>
 
             <button
               onClick={handleSubmit}
