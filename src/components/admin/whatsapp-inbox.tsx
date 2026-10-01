@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Pause, Play, Send, User, MessageCircleWarning, BellRing } from "lucide-react";
+import { Bot, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
+import StartConversationModal from "./start-conversation-modal";
 
 function timeLabel(iso: string) {
   return new Date(iso).toLocaleString("es-AR", {
@@ -31,6 +32,7 @@ export default function WhatsappInbox({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNewContact, setShowNewContact] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const selected = conversations.find((c) => c.id === selectedId) || null;
@@ -175,15 +177,43 @@ export default function WhatsappInbox({
           Todavía no llegó ningún mensaje de WhatsApp. En cuanto un cliente le
           escriba al número de Bakery Box, la conversación va a aparecer acá.
         </p>
+        <button
+          onClick={() => setShowNewContact(true)}
+          className="mt-2 flex items-center gap-1.5 rounded-full bg-brown-900 px-4 py-2 text-sm font-medium text-cream transition hover:bg-brown-800"
+        >
+          <UserPlus className="h-4 w-4" />
+          Mandar primer mensaje
+        </button>
+        {showNewContact && (
+          <StartConversationModal
+            onClose={() => setShowNewContact(false)}
+            onSent={(id) => {
+              setShowNewContact(false);
+              setSelectedId(id);
+            }}
+          />
+        )}
       </div>
     );
   }
 
   return (
+    <>
     <div className="grid h-full grid-cols-1 gap-4 md:grid-cols-[280px_1fr]">
       {/* Lista de conversaciones */}
-      <div className="overflow-y-auto rounded-2xl bg-paper shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
-        <ul className="divide-y divide-brown-900/5">
+      <div className="flex flex-col overflow-hidden rounded-2xl bg-paper shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
+        <div className="flex items-center justify-between gap-2 border-b border-brown-900/10 px-3 py-2.5">
+          <span className="text-xs font-medium text-brown-800/50">Conversaciones</span>
+          <button
+            onClick={() => setShowNewContact(true)}
+            className="flex items-center gap-1 rounded-full bg-cream-dark px-3 py-1.5 text-xs font-medium text-brown-800 transition hover:bg-brown-900/10"
+            title="Mandar el primer mensaje a alguien que todavía no te escribió"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Nuevo
+          </button>
+        </div>
+        <ul className="divide-y divide-brown-900/5 overflow-y-auto">
           {conversations.map((conv) => (
             <li key={conv.id}>
               <button
@@ -346,5 +376,15 @@ export default function WhatsappInbox({
         )}
       </div>
     </div>
+    {showNewContact && (
+      <StartConversationModal
+        onClose={() => setShowNewContact(false)}
+        onSent={(id) => {
+          setShowNewContact(false);
+          setSelectedId(id);
+        }}
+      />
+    )}
+    </>
   );
 }

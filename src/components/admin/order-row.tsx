@@ -1,8 +1,10 @@
 "use client";
 
-import { ChevronDown, CircleDollarSign, CircleCheck } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, CircleDollarSign, CircleCheck, MessageCircle } from "lucide-react";
 import { Order } from "@/lib/types";
 import { formatPrice } from "@/lib/format";
+import StartConversationModal from "./start-conversation-modal";
 
 export const statusOptions = [
   { value: "nuevo", label: "Nuevo", color: "bg-gold-500" },
@@ -25,6 +27,7 @@ export function OrderRow({
   onTogglePaid: () => void;
 }) {
   const status = statusOptions.find((s) => s.value === order.status) || statusOptions[0];
+  const [showContactModal, setShowContactModal] = useState(false);
   return (
     <li className="rounded-2xl bg-paper shadow-[0_1px_3px_rgba(74,46,24,0.08)]">
       <button
@@ -80,8 +83,18 @@ export function OrderRow({
               <span className="font-medium">Dirección:</span> {order.address}
             </p>
           )}
-          <p className="mb-1 text-sm text-brown-800/70">
-            <span className="font-medium">Teléfono:</span> {order.customer_phone}
+          <p className="mb-1 flex flex-wrap items-center gap-2 text-sm text-brown-800/70">
+            <span>
+              <span className="font-medium">Teléfono:</span> {order.customer_phone}
+            </span>
+            <button
+              onClick={() => setShowContactModal(true)}
+              className="flex items-center gap-1 rounded-full bg-[#25D366]/10 px-2.5 py-1 text-xs font-medium text-[#1a7a43] transition hover:bg-[#25D366]/20"
+              title="Para clientes que todavía no te escribieron por WhatsApp (ej: pidieron por la página pero no lo mandaron)"
+            >
+              <MessageCircle className="h-3 w-3" />
+              Mandar primer mensaje
+            </button>
           </p>
           {order.discount_code && (
             <p className="mb-1 text-sm text-brown-800/70">
@@ -129,6 +142,13 @@ export function OrderRow({
             </button>
           </div>
         </div>
+      )}
+      {showContactModal && (
+        <StartConversationModal
+          initialPhone={order.customer_phone}
+          initialName={order.customer_name}
+          onClose={() => setShowContactModal(false)}
+        />
       )}
     </li>
   );
