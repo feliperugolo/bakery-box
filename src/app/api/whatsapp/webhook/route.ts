@@ -27,12 +27,11 @@ const NON_TEXT_LABELS: Record<string, string> = {
   contacts: "un contacto",
 };
 
-function nonTextReply(type: string, isNewCustomer: boolean): string {
-  const label = NON_TEXT_LABELS[type] || "ese tipo de mensaje";
-  const intro = isNewCustomer
-    ? "¡Hola! Soy el asistente virtual de Bakery Box 😊 "
-    : "";
-  return `${intro}Por ahora no puedo escuchar ni ver ${label} 🙈 ¿me lo escribís en un mensaje de texto? Así te ayudo enseguida.`;
+function nonTextReply(isNewCustomer: boolean): string {
+  if (isNewCustomer) {
+    return "¡Hola! Gracias por comunicarte con Bakery Box 🧁 Soy el asistente virtual de la tienda. Por ahora este WhatsApp no puede escuchar audios ni ver imágenes — ¿me contás por mensaje de texto en qué te puedo ayudar?";
+  }
+  return "Este WhatsApp todavía no puede escuchar audios ni ver imágenes. ¿Me lo escribís en un mensaje de texto? Así seguimos sin problema.";
 }
 
 function nonTextPreview(type: string): string {
@@ -145,7 +144,7 @@ export async function POST(request: NextRequest) {
     if (!isText) {
       // No sabemos procesar audios, imágenes, etc: avisarle al cliente que
       // nos escriba en texto en vez de dejarlo sin respuesta.
-      const replyText = nonTextReply(message.type, isNew);
+      const replyText = nonTextReply(isNew);
       const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
       await insertMessage(supabase, {
         conversationId: conversation.id,
