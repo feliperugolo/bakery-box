@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { seedCategories, seedProducts } from "@/lib/seed-data";
 import {
   Category,
+  Customer,
   DiscountCode,
   Order,
   Product,
@@ -205,6 +206,19 @@ export async function getAllDiscountCodesAdmin(): Promise<DiscountCode[]> {
 
   if (error || !data) return [];
   return data as DiscountCode[];
+}
+
+export async function getCustomersAdmin(): Promise<Customer[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data as Customer[];
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {

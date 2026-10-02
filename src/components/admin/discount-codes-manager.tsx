@@ -125,7 +125,17 @@ export default function DiscountCodesManager({
                 className="flex items-center gap-3 rounded-2xl bg-paper p-3.5 shadow-[0_1px_3px_rgba(74,46,24,0.08)]"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-brown-900">{item.code}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-brown-900">{item.code}</p>
+                    {item.customer_phone && (
+                      <span
+                        className="rounded-full bg-gold-500/20 px-2 py-0.5 text-[11px] font-semibold text-gold-700"
+                        title={`Solo válido para ${item.customer_phone}`}
+                      >
+                        Personal · {item.customer_phone}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-brown-800/50">
                     {item.type === "percent"
                       ? `${item.value}% de descuento`

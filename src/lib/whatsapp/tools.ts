@@ -200,7 +200,10 @@ export async function runCreateOrder(
       .eq("active", true)
       .maybeSingle();
 
-    if (discount) {
+    if (
+      discount &&
+      (!discount.customer_phone || phoneNumbersMatch(discount.customer_phone, customerPhone))
+    ) {
       discountCode = discount.code;
       discountAmount =
         discount.type === "percent"

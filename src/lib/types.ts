@@ -90,6 +90,15 @@ export type DiscountCode = {
   value: number;
   active: boolean;
   created_at: string;
+  customer_phone: string | null;
+};
+
+export type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  notes: string;
+  created_at: string;
 };
 
 export type WhatsappSender = "customer" | "bot" | "admin";

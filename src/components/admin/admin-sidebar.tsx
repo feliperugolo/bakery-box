@@ -17,6 +17,7 @@ import {
   MessageCircle,
   BarChart3,
   BellRing,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation } from "@/lib/types";
@@ -27,6 +28,7 @@ const links = [
   { href: "/admin/categorias", label: "Categorías", icon: Tags },
   { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
   { href: "/admin/pedidos", label: "Pedidos", icon: ClipboardList },
+  { href: "/admin/clientes", label: "Clientes", icon: Users },
   { href: "/admin/historial", label: "Historial", icon: History },
   { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },

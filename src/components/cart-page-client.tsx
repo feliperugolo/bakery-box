@@ -12,6 +12,7 @@ import { isSupabaseConfigured as supabaseConfigured } from "@/lib/supabase-confi
 import { useHasMounted } from "@/lib/use-has-mounted";
 import { getDeliveryDayOptions } from "@/lib/delivery";
 import { DeliveryMethod, DiscountCode, PaymentMethod, SiteSettings } from "@/lib/types";
+import { phoneNumbersMatch } from "@/lib/phone";
 
 export default function CartPageClient({ settings }: { settings: SiteSettings }) {
   const mounted = useHasMounted();
@@ -110,6 +111,13 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
     }
     if (phoneDigits.length < 8) {
       setError("Revisá el teléfono, parece que le faltan números.");
+      return;
+    }
+    if (
+      appliedDiscount?.customer_phone &&
+      !phoneNumbersMatch(appliedDiscount.customer_phone, phone)
+    ) {
+      setError("El código de descuento que aplicaste es personal para otro número de teléfono.");
       return;
     }
     if (deliveryMethod === "delivery" && !address.trim()) {
