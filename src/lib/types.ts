@@ -78,6 +78,7 @@ export type Order = {
   discount_amount: number;
   paid: boolean;
   paid_at: string | null;
+  awaiting_whatsapp_confirmation: boolean;
 };
 
 export type DiscountType = "percent" | "fixed";

@@ -62,6 +62,7 @@ export default function AddOrderModal({
     discount_amount: number;
     paid: boolean;
     paid_at: string | null;
+    awaiting_whatsapp_confirmation: boolean;
   }) => Promise<string | void>;
 }) {
   const [customerName, setCustomerName] = useState("");
@@ -150,6 +151,7 @@ export default function AddOrderModal({
       discount_amount: discountAmount,
       paid,
       paid_at: paid ? new Date().toISOString() : null,
+      awaiting_whatsapp_confirmation: false,
     });
     setSaving(false);
     if (errMsg) setError(errMsg);

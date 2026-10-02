@@ -158,6 +158,7 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
           discount_code: appliedDiscount?.code || null,
           discount_amount: discountAmount,
           notes: notes.trim(),
+          awaiting_whatsapp_confirmation: true,
         });
       } catch {
         // Si falla el guardado igual dejamos que el pedido se mande por WhatsApp.

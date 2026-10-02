@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { formatPrice } from "@/lib/format";
 import { getDeliveryDayOptions } from "@/lib/delivery";
 import { WhatsappMessage } from "@/lib/types";
-import { CREATE_ORDER_TOOL, runCreateOrder, NOTIFY_TEAM_TOOL, runNotifyTeam } from "./tools";
+import { CREATE_ORDER_TOOL, runCreateOrder, NOTIFY_TEAM_TOOL, runNotifyTeam, CANCEL_ORDER_TOOL, runCancelOrder } from "./tools";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabaseClient = SupabaseClient<any, any, any>;
@@ -116,6 +116,11 @@ CÓMO TOMAR UN PEDIDO:
 4. Recién CUANDO el cliente confirma que sí, llamá a la herramienta create_order con los datos exactos. Nunca la llames antes de tener la confirmación explícita.
 5. Después de crear el pedido, confirmale al cliente que quedó registrado y qué sigue (transferir y avisar, o coordinar el pago al recibir/retirar).
 
+SI EL CLIENTE QUIERE CANCELAR SU PEDIDO:
+1. Confirmá con él que efectivamente quiere cancelarlo (ej: "¿confirmás que querés cancelar tu pedido?").
+2. Recién CUANDO confirma que sí, llamá a la herramienta cancel_order. Nunca la llames sin esa confirmación explícita — es permanente, no se puede deshacer.
+3. Avisale que quedó cancelado. Si la herramienta no encuentra ningún pedido suyo, decíselo con amabilidad y llamá a notify_team para que el equipo lo revise.
+
 Si preguntan algo fuera de esto (reclamos, pedidos muy especiales de diseño, algo que no sepas resolver), respondé con amabilidad, decí que en breve el equipo de Bakery Box lo va a contactar para eso puntual, y llamá a la herramienta notify_team con un resumen breve del motivo — así el equipo ve que esa charla necesita seguimiento humano. No inventes información que no tenés.`;
 }
 
@@ -162,7 +167,7 @@ export async function runBotTurn(args: {
       model: process.env.WHATSAPP_BOT_MODEL || "claude-sonnet-4-5-20250929",
       max_tokens: 1024,
       system,
-      tools: [CREATE_ORDER_TOOL, NOTIFY_TEAM_TOOL],
+      tools: [CREATE_ORDER_TOOL, NOTIFY_TEAM_TOOL, CANCEL_ORDER_TOOL],
       messages,
     });
 
@@ -184,6 +189,8 @@ export async function runBotTurn(args: {
       } else if (toolUse.name === "notify_team") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resultText = await runNotifyTeam(args.supabase, args.customerPhone, toolUse.input as any);
+      } else if (toolUse.name === "cancel_order") {
+        resultText = await runCancelOrder(args.supabase, args.customerPhone);
       }
       toolResults.push({
         type: "tool_result",

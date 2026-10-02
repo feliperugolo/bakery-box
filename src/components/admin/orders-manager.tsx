@@ -43,6 +43,19 @@ export default function OrdersManager({
 
   const updateStatus = async (order: Order, status: Order["status"]) => {
     const supabase = createClient();
+
+    if (status === "cancelado") {
+      // Los cancelados se borran directamente (no se guardan ni en
+      // historial ni en reportes) en vez de solo cambiarles el estado.
+      const confirmed = window.confirm(
+        `¿Cancelar el pedido de ${order.customer_name}? Se borra del sistema y no se puede deshacer.`
+      );
+      if (!confirmed) return;
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      await supabase.from("orders").delete().eq("id", order.id);
+      return;
+    }
+
     setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status } : o)));
     await supabase.from("orders").update({ status }).eq("id", order.id);
   };

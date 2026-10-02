@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
 import { formatPrice } from "@/lib/format";
+import { phoneNumbersMatch } from "@/lib/phone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabaseClient = SupabaseClient<any, any, any>;
@@ -210,23 +211,47 @@ export async function runCreateOrder(
 
   const total = subtotal - discountAmount;
 
-  const { data: order, error } = await supabase
+  const orderPayload = {
+    customer_name: input.customer_name,
+    customer_phone: customerPhone,
+    delivery_method: input.delivery_method,
+    address: input.address || "",
+    payment_method: input.payment_method,
+    items: resolvedItems,
+    total,
+    discount_code: discountCode,
+    discount_amount: discountAmount,
+    notes: input.notes || "",
+    delivery_date: input.delivery_date,
+    awaiting_whatsapp_confirmation: false,
+  };
+
+  // Si el cliente armó este pedido en la página y lo está confirmando ahora
+  // por WhatsApp, ya existe una fila guardada desde el checkout (marcada
+  // awaiting_whatsapp_confirmation) — hay que actualizar esa en vez de crear
+  // una nueva, si no el pedido queda duplicado en el panel. La comparamos
+  // por teléfono (tolerando formato distinto entre lo que tipeó en la
+  // página y el número real de WhatsApp) y que sea reciente.
+  const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const { data: pendingOrders } = await supabase
     .from("orders")
-    .insert({
-      customer_name: input.customer_name,
-      customer_phone: customerPhone,
-      delivery_method: input.delivery_method,
-      address: input.address || "",
-      payment_method: input.payment_method,
-      items: resolvedItems,
-      total,
-      discount_code: discountCode,
-      discount_amount: discountAmount,
-      notes: input.notes || "",
-      delivery_date: input.delivery_date,
-    })
-    .select("id")
-    .single();
+    .select("id, customer_phone")
+    .eq("awaiting_whatsapp_confirmation", true)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false });
+
+  const matchingPending = (pendingOrders || []).find((o: { customer_phone: string }) =>
+    phoneNumbersMatch(o.customer_phone, customerPhone)
+  );
+
+  const { data: order, error } = matchingPending
+    ? await supabase
+        .from("orders")
+        .update(orderPayload)
+        .eq("id", matchingPending.id)
+        .select("id")
+        .single()
+    : await supabase.from("orders").insert(orderPayload).select("id").single();
 
   if (error || !order) {
     return `Error al guardar el pedido: ${error?.message}. Avisale al cliente que hubo un problema técnico y que un humano lo va a contactar.`;
@@ -253,4 +278,43 @@ export async function runCreateOrder(
       : `Total ${formatPrice(total)}.`,
     `Ahora confirmale al cliente que el pedido quedó registrado, con el total final y los próximos pasos según la forma de pago.`,
   ].join(" ");
+}
+export const CANCEL_ORDER_TOOL: Anthropic.Tool = {
+  name: "cancel_order",
+  description:
+    "Cancela el pedido más reciente del cliente y lo borra del sistema. Usala SOLO después de que el cliente confirmó explícitamente que quiere cancelar (ej: le preguntaste '¿confirmás que querés cancelar tu pedido?' y te dijo que sí). Es una acción permanente, no se puede deshacer.",
+  input_schema: {
+    type: "object",
+    properties: {},
+  },
+};
+
+export async function runCancelOrder(
+  supabase: AnySupabaseClient,
+  customerPhone: string
+): Promise<string> {
+  const { data: candidates } = await supabase
+    .from("orders")
+    .select("id, customer_phone, status, created_at")
+    .order("created_at", { ascending: false })
+    .limit(30);
+
+  const order = (candidates || []).find(
+    (o: { customer_phone: string; status: string }) =>
+      o.status !== "cancelado" &&
+      o.status !== "entregado" &&
+      phoneNumbersMatch(o.customer_phone, customerPhone)
+  );
+
+  if (!order) {
+    return "No encontré ningún pedido activo a nombre de este número para cancelar. Avisale al cliente que no tenemos un pedido pendiente con este teléfono, y si cree que es un error, llamá a notify_team.";
+  }
+
+  const { error } = await supabase.from("orders").delete().eq("id", order.id);
+
+  if (error) {
+    return `No se pudo cancelar el pedido (${error.message}). Avisale al cliente que el equipo lo va a resolver a mano y llamá a notify_team.`;
+  }
+
+  return "Listo, el pedido se canceló y se borró del sistema. Avisale al cliente que quedó cancelado sin problema.";
 }
