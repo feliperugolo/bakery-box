@@ -247,6 +247,28 @@ export async function runCreateOrder(
     phoneNumbersMatch(o.customer_phone, customerPhone)
   );
 
+  // Red de seguridad extra contra duplicados: si en los últimos minutos ya
+  // se guardó un pedido con este mismo teléfono y mismo total (ej: porque
+  // el cliente mandó varios mensajes de confirmación casi juntos y se
+  // alcanzaron a procesar dos veces), no insertamos uno nuevo — devolvemos
+  // el que ya existe en vez de duplicarlo.
+  let recentDuplicate: { id: string } | null = null;
+  if (!matchingPending) {
+    const recentSince = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+    const { data: recentOrders } = await supabase
+      .from("orders")
+      .select("id, customer_phone, total, status")
+      .gte("created_at", recentSince)
+      .neq("status", "cancelado");
+
+    recentDuplicate =
+      (recentOrders || []).find(
+        (o: { customer_phone: string; total: number }) =>
+          phoneNumbersMatch(o.customer_phone, customerPhone) &&
+          Math.abs(Number(o.total) - total) < 1
+      ) || null;
+  }
+
   const { data: order, error } = matchingPending
     ? await supabase
         .from("orders")
@@ -254,7 +276,9 @@ export async function runCreateOrder(
         .eq("id", matchingPending.id)
         .select("id")
         .single()
-    : await supabase.from("orders").insert(orderPayload).select("id").single();
+    : recentDuplicate
+      ? { data: recentDuplicate, error: null }
+      : await supabase.from("orders").insert(orderPayload).select("id").single();
 
   if (error || !order) {
     return `Error al guardar el pedido: ${error?.message}. Avisale al cliente que hubo un problema técnico y que un humano lo va a contactar.`;

@@ -114,6 +114,8 @@ export type WhatsappConversation = {
   unread_count: number;
   needs_attention: boolean;
   created_at: string;
+  bot_processing: boolean;
+  bot_processing_started_at: string | null;
 };
 
 export type WhatsappMessage = {

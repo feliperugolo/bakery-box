@@ -6,6 +6,8 @@ import {
   touchConversation,
   getRecentMessages,
   isRepeatingLoop,
+  acquireBotLockWithWait,
+  releaseBotLock,
 } from "@/lib/whatsapp/store";
 import { runBotTurn } from "@/lib/whatsapp/agent";
 import { sendWhatsappMessage } from "@/lib/whatsapp/send";
@@ -157,43 +159,59 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const history = await getRecentMessages(supabase, conversation.id, 20);
+    // Si el cliente manda varios mensajes seguidos (ej: "Holaa", "Sii
+    // perfecto", "Confirmo" en un par de segundos), cada uno llega como un
+    // webhook distinto y, sin esto, cada uno disparaba su propia corrida
+    // del bot EN PARALELO — con el historial todavía desactualizado, las
+    // dos podían terminar confirmando el mismo pedido y duplicándolo. Esta
+    // traba hace que, para esta conversación, se procese un mensaje a la
+    // vez: el segundo espera a que el primero termine (y así lee el
+    // historial ya actualizado) antes de armar su propia respuesta.
+    const lockAcquired = await acquireBotLockWithWait(supabase, conversation.id);
 
-    let replyText: string;
-    let aiFailed = false;
     try {
-      replyText = await runBotTurn({
-        supabase,
-        customerPhone: fromNumber,
-        history: history.slice(0, -1), // el mensaje que acabamos de guardar ya va como incomingText
-        incomingText: text,
+      const history = await getRecentMessages(supabase, conversation.id, 20);
+
+      let replyText: string;
+      let aiFailed = false;
+      try {
+        replyText = await runBotTurn({
+          supabase,
+          customerPhone: fromNumber,
+          history: history.slice(0, -1), // el mensaje que acabamos de guardar ya va como incomingText
+          incomingText: text,
+        });
+      } catch (err) {
+        // Si falla la IA (sin crédito, caída del servicio, etc.) no dejamos al
+        // cliente sin respuesta: le avisamos que el equipo lo va a contactar y
+        // marcamos la charla para que se note en el panel, en vez de fallar en
+        // silencio como antes.
+        console.error("Error al generar la respuesta del bot:", err);
+        aiFailed = true;
+        replyText =
+          "Perdón, tuve un problema técnico para responder. El equipo de Bakery Box te va a contactar en breve.";
+      }
+
+      const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
+      await insertMessage(supabase, {
+        conversationId: conversation.id,
+        direction: "outbound",
+        sender: "bot",
+        body: replyText,
+        waMessageId: outboundId,
       });
-    } catch (err) {
-      // Si falla la IA (sin crédito, caída del servicio, etc.) no dejamos al
-      // cliente sin respuesta: le avisamos que el equipo lo va a contactar y
-      // marcamos la charla para que se note en el panel, en vez de fallar en
-      // silencio como antes.
-      console.error("Error al generar la respuesta del bot:", err);
-      aiFailed = true;
-      replyText =
-        "Perdón, tuve un problema técnico para responder. El equipo de Bakery Box te va a contactar en breve.";
-    }
+      await touchConversation(supabase, conversation.id, { preview: replyText });
 
-    const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
-    await insertMessage(supabase, {
-      conversationId: conversation.id,
-      direction: "outbound",
-      sender: "bot",
-      body: replyText,
-      waMessageId: outboundId,
-    });
-    await touchConversation(supabase, conversation.id, { preview: replyText });
-
-    if (aiFailed) {
-      await supabase
-        .from("whatsapp_conversations")
-        .update({ needs_attention: true })
-        .eq("id", conversation.id);
+      if (aiFailed) {
+        await supabase
+          .from("whatsapp_conversations")
+          .update({ needs_attention: true })
+          .eq("id", conversation.id);
+      }
+    } finally {
+      if (lockAcquired) {
+        await releaseBotLock(supabase, conversation.id);
+      }
     }
 
     return NextResponse.json({ ok: true });

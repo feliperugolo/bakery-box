@@ -153,3 +153,77 @@ export async function isRepeatingLoop(
 
   return recent.every((m: { body: string }) => m.body === incomingBody);
 }
+
+// Cuánto puede durar como máximo una "traba" de procesamiento antes de
+// considerarla abandonada (ej: la función se cayó a mitad de camino sin
+// liberarla). Sin esto, un cuelgue dejaría la conversación trabada para
+// siempre.
+const BOT_LOCK_STALE_MS = 30_000;
+
+/**
+ * Varios mensajes seguidos del mismo cliente (ej: "Holaa", "Sii perfecto",
+ * "Confirmo" mandados en un par de segundos) le llegan al webhook como
+ * eventos separados, y cada uno disparaba su propia corrida del bot en
+ * paralelo. Dos corridas en paralelo podían terminar las dos confirmando
+ * el pedido, duplicándolo. Esta traba asegura que, para una misma
+ * conversación, solo una corrida del bot esté "pensando" a la vez — las
+ * demás esperan su turno (ver tryAcquireBotLock) en vez de pisarse.
+ */
+export async function tryAcquireBotLock(
+  supabase: AnySupabaseClient,
+  conversationId: string
+): Promise<boolean> {
+  const staleThreshold = new Date(Date.now() - BOT_LOCK_STALE_MS).toISOString();
+
+  const { data } = await supabase
+    .from("whatsapp_conversations")
+    .update({
+      bot_processing: true,
+      bot_processing_started_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId)
+    .or(`bot_processing.eq.false,bot_processing_started_at.lt.${staleThreshold}`)
+    .select("id")
+    .maybeSingle();
+
+  return Boolean(data);
+}
+
+export async function releaseBotLock(
+  supabase: AnySupabaseClient,
+  conversationId: string
+): Promise<void> {
+  await supabase
+    .from("whatsapp_conversations")
+    .update({ bot_processing: false, bot_processing_started_at: null })
+    .eq("id", conversationId);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Espera hasta conseguir la traba de la conversación (con un tope de tiempo
+ * para no colgar el webhook si algo quedó mal). Devuelve true si la
+ * consiguió; false si se agotó la espera (caso raro) — en ese caso seguimos
+ * de todas formas para no dejar al cliente sin respuesta, pero releyendo
+ * el historial más reciente antes de contestar.
+ */
+export async function acquireBotLockWithWait(
+  supabase: AnySupabaseClient,
+  conversationId: string,
+  maxWaitMs = 8000,
+  pollMs = 400
+): Promise<boolean> {
+  if (await tryAcquireBotLock(supabase, conversationId)) return true;
+
+  let waited = 0;
+  while (waited < maxWaitMs) {
+    await sleep(pollMs);
+    waited += pollMs;
+    if (await tryAcquireBotLock(supabase, conversationId)) return true;
+  }
+
+  return false;
+}
