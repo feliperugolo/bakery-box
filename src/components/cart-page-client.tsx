@@ -23,6 +23,11 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // Campo "honeypot" invisible para humanos: los bots que recorren la web
+  // completando formularios al azar suelen llenar cualquier campo que
+  // encuentren, incluso uno oculto. Si este campo llega con algo escrito,
+  // asumimos que no es un cliente real y no hacemos nada.
+  const [website, setWebsite] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>("retiro");
   const [address, setAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
@@ -99,6 +104,12 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
   const handleSubmit = async () => {
     setError(null);
 
+    if (website.trim()) {
+      // Lo completó un bot (el campo es invisible para una persona): no
+      // mostramos error ni mandamos nada, simplemente no hacemos nada.
+      return;
+    }
+
     if (items.length === 0) return;
     if (!name.trim()) {
       setError("Contanos tu nombre para el pedido.");
@@ -118,6 +129,10 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
       !phoneNumbersMatch(appliedDiscount.customer_phone, phone)
     ) {
       setError("El código de descuento que aplicaste es personal para otro número de teléfono.");
+      return;
+    }
+    if (phoneNumbersMatch(phone, settings.whatsapp_number)) {
+      setError("Ese es el número de WhatsApp de la tienda — ingresá tu propio teléfono de contacto.");
       return;
     }
     if (deliveryMethod === "delivery" && !address.trim()) {
@@ -355,6 +370,25 @@ export default function CartPageClient({ settings }: { settings: SiteSettings })
           </div>
 
           <div className="mt-5 flex flex-col gap-4">
+            {/* Honeypot anti-bots: oculto para una persona, visible para un
+                bot que lee el HTML. No tiene label ni se ve en pantalla. */}
+            <input
+              type="text"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              name="website"
+              autoComplete="off"
+              tabIndex={-1}
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                width: 1,
+                height: 1,
+                opacity: 0,
+                pointerEvents: "none",
+                left: "-9999px",
+              }}
+            />
             <div>
               <label className="mb-1 block text-sm font-medium text-brown-800">
                 Nombre y apellido
