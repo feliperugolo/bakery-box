@@ -42,6 +42,17 @@ function nonTextPreview(type: string): string {
 }
 
 /**
+ * Reacciones (ej: tocar y mantener un mensaje para poner un 👍 o ❤️). WhatsApp
+ * manda esto como un mensaje de tipo "reaction", no como texto. No es algo
+ * que el bot tenga que responder — solo lo dejamos registrado en la
+ * conversación para que se vea en el panel, y no le contestamos nada.
+ */
+function reactionPreview(message: { reaction?: { emoji?: string } }): string {
+  const emoji = message.reaction?.emoji;
+  return emoji ? `Reaccionó con ${emoji}` : "Reaccionó a un mensaje";
+}
+
+/**
  * Verificación del webhook: Meta llama a esto una sola vez cuando configurás
  * la URL en el panel de desarrolladores, para confirmar que el endpoint es
  * tuyo. Tiene que devolver el "challenge" tal cual si el verify_token coincide.
@@ -84,16 +95,23 @@ export async function POST(request: NextRequest) {
     const contactName: string | undefined =
       change?.contacts?.[0]?.profile?.name;
     const isText = message.type === "text";
+    const isReaction = message.type === "reaction";
     const text: string = isText ? message.text?.body || "" : "";
 
     const supabase = createServiceClient();
     const { conversation, isNew } = await getOrCreateConversation(supabase, fromNumber, contactName);
 
+    const inboundPreview = isText
+      ? text
+      : isReaction
+        ? reactionPreview(message)
+        : nonTextPreview(message.type);
+
     const { duplicate } = await insertMessage(supabase, {
       conversationId: conversation.id,
       direction: "inbound",
       sender: "customer",
-      body: isText ? text : nonTextPreview(message.type),
+      body: inboundPreview,
       waMessageId,
     });
 
@@ -103,9 +121,15 @@ export async function POST(request: NextRequest) {
     }
 
     await touchConversation(supabase, conversation.id, {
-      preview: isText ? text : nonTextPreview(message.type),
+      preview: inboundPreview,
       incrementUnread: true,
     });
+
+    if (isReaction) {
+      // Solo lo registramos arriba para que se vea en el panel — el bot no
+      // tiene nada que contestarle a una reacción.
+      return NextResponse.json({ ok: true });
+    }
 
     if (conversation.bot_paused) {
       // El admin tomó esta conversación a mano: no contestar automáticamente,
