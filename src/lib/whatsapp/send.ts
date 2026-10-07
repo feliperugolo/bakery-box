@@ -61,7 +61,11 @@ export async function sendWhatsappTemplate(
   to: string,
   templateName: string,
   languageCode: string,
-  bodyParams: string[] = []
+  // Las plantillas que se crean hoy en el WhatsApp Manager usan "parámetros
+  // con nombre" (ej: {{customer_name}}) en vez de los viejos {{1}}, {{2}}.
+  // Meta rechaza el envío si no le mandamos ese nombre exacto junto con el
+  // valor, con el error "Parameter name is missing or empty".
+  bodyParams: { name: string; value: string }[] = []
 ) {
   const token = process.env.WHATSAPP_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -77,7 +81,11 @@ export async function sendWhatsappTemplate(
       ? [
           {
             type: "body",
-            parameters: bodyParams.map((text) => ({ type: "text", text })),
+            parameters: bodyParams.map((p) => ({
+              type: "text",
+              parameter_name: p.name,
+              text: p.value,
+            })),
           },
         ]
       : [];

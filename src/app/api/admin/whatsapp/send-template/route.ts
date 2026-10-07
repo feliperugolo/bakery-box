@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { waMessageId } = await sendWhatsappTemplate(cleanPhone, templateName, languageCode, [
-      name,
+      { name: "customer_name", value: name },
     ]);
 
     const { conversation } = await getOrCreateConversation(supabase, cleanPhone, name);
