@@ -171,8 +171,19 @@ export async function runBotTurn(args: {
       messages,
     });
 
+    // OJO: a veces el modelo manda el texto para el cliente en la MISMA
+    // respuesta en la que también pide usar una herramienta (ej: "dale, le
+    // aviso al equipo" + tool_use notify_team), y la vuelta siguiente (ya
+    // con el resultado de la herramienta) no agrega texto nuevo porque no
+    // tiene nada más para decir. Antes esto pisaba finalText con "" y el
+    // cliente se quedaba con el mensaje genérico de error aunque el bot sí
+    // había generado una respuesta. Por eso solo actualizamos finalText
+    // cuando esta vuelta trajo texto de verdad.
     const textBlocks = response.content.filter((b) => b.type === "text");
-    finalText = textBlocks.map((b) => (b as Anthropic.TextBlock).text).join("\n").trim();
+    const textThisTurn = textBlocks.map((b) => (b as Anthropic.TextBlock).text).join("\n").trim();
+    if (textThisTurn) {
+      finalText = textThisTurn;
+    }
 
     if (response.stop_reason !== "tool_use") break;
 
