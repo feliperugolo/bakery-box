@@ -75,14 +75,20 @@ async function buildSystemPrompt(supabase: AnySupabaseClient): Promise<string> {
   const cutoff = getWeeklyCutoffWindow();
   const tomorrowLabel = formatDeliveryDate(cutoff.tomorrowDateStr);
   const nextMondayLabel = formatDeliveryDate(cutoff.nextMondayDateStr);
+  // OJO: estas notas son para el BOT, no son texto para copiar y pegar.
+  // Nunca deben mencionarle al cliente horarios de corte internos ni
+  // "ventanas" (jueves 23:59, viernes 18:00, etc) — queda poco comercial.
+  // De cara al cliente, todo se explica en términos de la política general
+  // (pedimos con 48hs de anticipación) y, si corresponde, de que el sábado
+  // puntual que pidió queda sujeto a stock.
   let weeklyCutoffNote: string;
   if (cutoff.window === "normal") {
     weeklyCutoffNote =
-      "Ahora mismo estamos dentro del ciclo normal de pedidos de la semana (tomamos pedidos con 48hs de anticipación, y el cierre normal de la semana es el jueves hasta las 23:59). No hace falta ninguna aclaración especial sobre stock o demoras: tomá cualquier fecha disponible con total normalidad.";
+      "No hace falta ninguna aclaración especial sobre stock ahora mismo: tomá cualquier fecha disponible con total normalidad. Si el cliente pregunta por los tiempos de entrega, contale simplemente que tomamos pedidos con 48hs de anticipación.";
   } else if (cutoff.window === "friday_stock") {
-    weeklyCutoffNote = `Ya pasó el cierre normal de la semana (jueves 23:59) — estamos en la ventana del viernes hasta las 18:00. Si el cliente pide que le entreguemos MAÑANA (${tomorrowLabel}), explicale que por haber pedido después del cierre normal, ese pedido queda sujeto a stock disponible, y que alguien del equipo de Bakery Box le va a confirmar en breve si hay stock para entregarle mañana. Igual podés tomarle el pedido con create_order con total normalidad — el sistema ya lo marca para que el equipo lo revise. Si en cambio pide entrega para más adelante que mañana, no hace falta esta aclaración: tomalo con total normalidad.`;
+    weeklyCutoffNote = `Si el cliente pide que le entreguemos MAÑANA (${tomorrowLabel}), contale con naturalidad —sin mencionar horarios de corte ni "ventanas" internas— que tomamos pedidos con 48hs de anticipación, y que como pide para recibir mañana, ese pedido en particular queda sujeto a stock disponible: alguien del equipo de Bakery Box le va a confirmar en breve si tenemos stock para entregarle mañana. Igual podés tomarle el pedido con create_order con total normalidad — el sistema ya lo marca para que el equipo lo revise. Si en cambio pide entrega para más adelante que mañana, no hace falta esta aclaración: tomalo con total normalidad.`;
   } else {
-    weeklyCutoffNote = `Ya pasó el cierre de esta semana (viernes 18:00), así que no podemos conseguir nada para entregar antes del ${nextMondayLabel}. Si el cliente necesita recibirlo antes de esa fecha, explicale con buena onda que tomamos los pedidos con más anticipación, y proponele coordinar la entrega para el ${nextMondayLabel} en adelante — no llames a create_order para una fecha anterior a esa (vas a recibir un error si lo intentás). Si el cliente pide para el ${nextMondayLabel} o una fecha posterior, no hace falta ninguna aclaración: tomalo con total normalidad.`;
+    weeklyCutoffNote = `Si el cliente necesita recibirlo antes del ${nextMondayLabel}, contale con buena onda —sin mencionar horarios de corte internos— que tomamos los pedidos con 48hs de anticipación y que no llegamos a conseguirle algo para esa fecha, y proponele coordinar la entrega para el ${nextMondayLabel} en adelante. No llames a create_order para una fecha anterior a esa (vas a recibir un error si lo intentás). Si el cliente pide para el ${nextMondayLabel} o una fecha posterior, no hace falta ninguna aclaración: tomalo con total normalidad.`;
   }
 
   const pickupAddress = settings?.pickup_address || "a coordinar";
