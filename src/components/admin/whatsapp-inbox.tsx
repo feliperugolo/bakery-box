@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus } from "lucide-react";
+import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
 import StartConversationModal from "./start-conversation-modal";
@@ -20,14 +20,15 @@ function displayName(conv: WhatsappConversation) {
 }
 
 /**
- * Las fotos que mandan los clientes (ej: comprobantes de pago) se guardan en
- * un bucket privado de Storage, así que no hay una URL pública fija para
- * usar directo en un <img>: hay que pedirle a Supabase una URL firmada
- * (temporal) cada vez que se muestra. Por eso esto es su propio componente
- * en vez de solo un <img src=...>.
+ * Los archivos que mandan los clientes (fotos o PDFs de comprobantes de
+ * pago) se guardan en un bucket privado de Storage, así que no hay una URL
+ * pública fija para usarla directo: hay que pedirle a Supabase una URL
+ * firmada (temporal) cada vez que se muestran. Una foto se ve inline; un
+ * PDF se muestra como link para abrir, porque no se puede incrustar igual.
  */
-function WhatsappMediaImage({ path }: { path: string }) {
+function WhatsappMediaPreview({ path, mediaType }: { path: string; mediaType: string | null }) {
   const [url, setUrl] = useState<string | null>(null);
+  const isPdf = mediaType === "application/pdf";
 
   useEffect(() => {
     let active = true;
@@ -42,6 +43,22 @@ function WhatsappMediaImage({ path }: { path: string }) {
       active = false;
     };
   }, [path]);
+
+  if (isPdf) {
+    return (
+      <a
+        href={url || undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`mb-1.5 flex items-center gap-2 rounded-lg bg-brown-900/10 px-3 py-2 text-xs font-medium text-brown-900 ${
+          url ? "hover:bg-brown-900/20" : "pointer-events-none opacity-60"
+        }`}
+      >
+        <FileText className="h-4 w-4 shrink-0" />
+        {url ? "Ver comprobante (PDF)" : "Cargando PDF…"}
+      </a>
+    );
+  }
 
   if (!url) {
     return (
@@ -363,7 +380,9 @@ export default function WhatsappInbox({
                               : "bg-gold-500/90 text-white"
                         }`}
                       >
-                        {msg.media_path && <WhatsappMediaImage path={msg.media_path} />}
+                        {msg.media_path && (
+                          <WhatsappMediaPreview path={msg.media_path} mediaType={msg.media_type} />
+                        )}
                         <p>{msg.body}</p>
                         <div
                           className={`mt-1 flex items-center gap-1 text-[10px] ${

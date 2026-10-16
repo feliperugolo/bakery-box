@@ -11,7 +11,7 @@ import {
 } from "@/lib/whatsapp/store";
 import { runBotTurn } from "@/lib/whatsapp/agent";
 import { sendWhatsappMessage } from "@/lib/whatsapp/send";
-import { downloadWhatsappMedia, classifyReceiptImage } from "@/lib/whatsapp/media";
+import { downloadWhatsappMedia, classifyReceiptMedia } from "@/lib/whatsapp/media";
 
 /**
  * Mensajes de WhatsApp que no son texto (audio, imagen, video, documento,
@@ -98,25 +98,31 @@ export async function POST(request: NextRequest) {
     const isText = message.type === "text";
     const isReaction = message.type === "reaction";
     const isImage = message.type === "image";
+    // Un comprobante también puede llegar como PDF en vez de foto (ej:
+    // exportado del home banking). Solo tratamos como posible comprobante
+    // los documentos que son PDF — un .docx, .xlsx, etc. sigue cayendo en
+    // el aviso genérico de "no puedo leer este tipo de archivo".
+    const isPdfDocument = message.type === "document" && message.document?.mime_type === "application/pdf";
+    const mediaId: string | undefined = isImage ? message.image?.id : isPdfDocument ? message.document?.id : undefined;
     const text: string = isText ? message.text?.body || "" : "";
 
     const supabase = createServiceClient();
     const { conversation, isNew } = await getOrCreateConversation(supabase, fromNumber, contactName);
 
-    // Si manda una foto, la bajamos de WhatsApp y la guardamos en Supabase
-    // Storage (así queda visible en el panel), y le pedimos a la IA que la
-    // mire solo para decidir si es un comprobante de pago/transferencia —
-    // esto es aparte del bot de charla normal. Si algo de esto falla (Meta
-    // no responde, etc.) seguimos igual: la imagen simplemente no se trata
-    // como comprobante y cae en el aviso genérico de "no puedo ver fotos".
+    // Si manda una foto o un PDF, lo bajamos de WhatsApp y lo guardamos en
+    // Supabase Storage (así queda visible en el panel), y le pedimos a la
+    // IA que lo mire solo para decidir si es un comprobante de
+    // pago/transferencia — esto es aparte del bot de charla normal. Si algo
+    // de esto falla (Meta no responde, etc.) seguimos igual: el archivo
+    // simplemente no se trata como comprobante y cae en el aviso genérico.
     let mediaPath: string | null = null;
     let mediaType: string | null = null;
     let isReceiptImage = false;
     let receiptAmount: string | null = null;
 
-    if (isImage && message.image?.id) {
+    if (mediaId) {
       try {
-        const media = await downloadWhatsappMedia(message.image.id);
+        const media = await downloadWhatsappMedia(mediaId);
         mediaType = media.mimeType;
         const ext = (mediaType.split("/")[1] || "jpg").split("+")[0];
         const candidatePath = `${conversation.id}/${waMessageId}.${ext}`;
@@ -126,15 +132,15 @@ export async function POST(request: NextRequest) {
           .upload(candidatePath, media.buffer, { contentType: mediaType, upsert: true });
 
         if (uploadError) {
-          console.error("Error subiendo imagen de WhatsApp a Storage:", uploadError);
+          console.error("Error subiendo archivo de WhatsApp a Storage:", uploadError);
         } else {
           mediaPath = candidatePath;
-          const classification = await classifyReceiptImage(media.buffer.toString("base64"), mediaType);
+          const classification = await classifyReceiptMedia(media.buffer.toString("base64"), mediaType);
           isReceiptImage = classification.isReceipt;
           receiptAmount = classification.amount;
         }
       } catch (err) {
-        console.error("Error procesando imagen de WhatsApp:", err);
+        console.error("Error procesando archivo de WhatsApp:", err);
       }
     }
 
@@ -208,10 +214,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isText && !isReceiptImage) {
-      // No sabemos procesar audios, imágenes, etc: avisarle al cliente que
-      // nos escriba en texto en vez de dejarlo sin respuesta. Una foto que
-      // SÍ reconocimos como comprobante de pago no entra aquí — sigue de
-      // largo hasta el bot normal, más abajo.
+      // No sabemos procesar audios, imágenes, documentos, etc: avisarle al
+      // cliente que nos escriba en texto en vez de dejarlo sin respuesta.
+      // Una foto o PDF que SÍ reconocimos como comprobante de pago no entra
+      // aquí — sigue de largo hasta el bot normal, más abajo.
       const replyText = nonTextReply(isNew);
       const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
       await insertMessage(supabase, {
@@ -239,7 +245,7 @@ export async function POST(request: NextRequest) {
       const history = await getRecentMessages(supabase, conversation.id, 20);
 
       const botIncomingText = isReceiptImage
-        ? `[Mensaje del sistema, no del cliente: mandó una foto que parece ser un comprobante de pago o transferencia bancaria.${
+        ? `[Mensaje del sistema, no del cliente: mandó un archivo (foto o PDF) que parece ser un comprobante de pago o transferencia bancaria.${
             receiptAmount ? ` Monto que se llegó a leer en la imagen: ${receiptAmount}.` : " No se pudo leer el monto con claridad."
           } Agradecele de forma breve y cálida, y avisale que el equipo va a confirmar la recepción del pago. No llames a create_order, cancel_order ni notify_team por este mensaje.]`
         : text;

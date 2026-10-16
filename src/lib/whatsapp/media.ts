@@ -41,12 +41,14 @@ export async function downloadWhatsappMedia(
 }
 
 /**
- * Le muestra la imagen a la IA solo para clasificarla: ¿es un comprobante de
- * pago/transferencia o no? Esto es independiente del bot de charla (agent.ts)
- * — es una consulta chica y rápida, separada, para decidir cómo reaccionar
- * antes de meter la imagen en la conversación principal.
+ * Le muestra la imagen o el PDF a la IA solo para clasificarlo: ¿es un
+ * comprobante de pago/transferencia o no? Esto es independiente del bot de
+ * charla (agent.ts) — es una consulta chica y rápida, separada, para decidir
+ * cómo reaccionar antes de meter el archivo en la conversación principal.
+ * Claude puede leer tanto fotos como PDFs directamente, así que el único
+ * cambio entre uno y otro es el tipo de bloque que se manda.
  */
-export async function classifyReceiptImage(
+export async function classifyReceiptMedia(
   base64Data: string,
   mimeType: string
 ): Promise<{ isReceipt: boolean; amount: string | null }> {
@@ -54,6 +56,7 @@ export async function classifyReceiptImage(
   if (!apiKey) return { isReceipt: false, amount: null };
 
   const anthropic = new Anthropic({ apiKey });
+  const isPdf = mimeType === "application/pdf";
 
   try {
     const response = await anthropic.messages.create({
@@ -63,19 +66,28 @@ export async function classifyReceiptImage(
         {
           role: "user",
           content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                media_type: mimeType as any,
-                data: base64Data,
-              },
-            },
+            isPdf
+              ? {
+                  type: "document",
+                  source: {
+                    type: "base64",
+                    media_type: "application/pdf",
+                    data: base64Data,
+                  },
+                }
+              : {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    media_type: mimeType as any,
+                    data: base64Data,
+                  },
+                },
             {
               type: "text",
               text:
-                'Mirá esta imagen. ¿Es un comprobante de pago, transferencia bancaria o pago digital (ej: captura de Mercado Pago, home banking, transferencia, recibo de pago)? Respondé SOLO con un JSON de una línea, sin texto alrededor ni markdown, con esta forma exacta: {"is_receipt": true o false, "amount": "monto si se lee claro en el comprobante, sino null"}',
+                'Mirá este archivo. ¿Es un comprobante de pago, transferencia bancaria o pago digital (ej: captura o PDF de Mercado Pago, home banking, transferencia, recibo de pago)? Respondé SOLO con un JSON de una línea, sin texto alrededor ni markdown, con esta forma exacta: {"is_receipt": true o false, "amount": "monto si se lee claro en el comprobante, sino null"}',
             },
           ],
         },
@@ -95,7 +107,7 @@ export async function classifyReceiptImage(
       amount: rawAmount && rawAmount.toLowerCase() !== "null" ? rawAmount : null,
     };
   } catch (err) {
-    console.error("Error clasificando imagen de WhatsApp con IA:", err);
+    console.error("Error clasificando archivo de WhatsApp con IA:", err);
     return { isReceipt: false, amount: null };
   }
 }
