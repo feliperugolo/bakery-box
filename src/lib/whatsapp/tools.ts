@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type Anthropic from "@anthropic-ai/sdk";
 import { formatPrice } from "@/lib/format";
 import { phoneNumbersMatch } from "@/lib/phone";
+import { evaluateOrderTiming, formatDeliveryDate } from "@/lib/delivery";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabaseClient = SupabaseClient<any, any, any>;
@@ -122,6 +123,16 @@ export async function runCreateOrder(
 ): Promise<string> {
   if (!input.items || input.items.length === 0) {
     return "Error: el pedido no tiene productos. Pedile al cliente que aclare qué quiere pedir.";
+  }
+
+  // Chequeo de último momento sobre la fecha de entrega (ver
+  // src/lib/delivery.ts): el prompt del bot ya le explica esto al cliente
+  // antes de llegar hasta aquí, pero esta es la red de seguridad para que
+  // nunca se guarde un pedido fuera de la política aunque el modelo se
+  // haya equivocado.
+  const timing = evaluateOrderTiming(input.delivery_date);
+  if (timing.mode === "too_late") {
+    return `Error: no se puede tomar un pedido para el ${input.delivery_date} — ya pasó el cierre de esta semana (viernes 18hs) y esa fecha es anterior al ${timing.nextMondayDateStr}. NO llames a create_order de nuevo con esta fecha. Explicale al cliente, con buena onda, que tomamos los pedidos con más anticipación, y proponele coordinar la entrega para el ${formatDeliveryDate(timing.nextMondayDateStr)} en adelante.`;
   }
 
   const slugs = input.items.map((i) => i.product_slug);
@@ -287,9 +298,18 @@ export async function runCreateOrder(
   // El cliente acaba de dar su nombre real para el pedido — lo usamos para
   // identificar la charla en el panel en vez del apodo de WhatsApp (que a
   // veces no dice nada: emojis, motes, etc).
+  const conversationUpdate: { customer_name: string; needs_attention?: boolean } = {
+    customer_name: input.customer_name,
+  };
+  if (timing.mode === "subject_to_stock") {
+    // Pedido para entregar mañana, tomado después del cierre normal de la
+    // semana (jueves 23:59): queda sujeto a stock, hay que avisarle al
+    // equipo para que confirme disponibilidad.
+    conversationUpdate.needs_attention = true;
+  }
   await supabase
     .from("whatsapp_conversations")
-    .update({ customer_name: input.customer_name })
+    .update(conversationUpdate)
     .eq("phone_number", customerPhone);
 
   const lines = resolvedItems.map(
@@ -304,7 +324,12 @@ export async function runCreateOrder(
       ? `Subtotal ${formatPrice(subtotal)}, descuento ${formatPrice(discountAmount)}, total ${formatPrice(total)}.`
       : `Total ${formatPrice(total)}.`,
     `Ahora confirmale al cliente que el pedido quedó registrado, con el total final y los próximos pasos según la forma de pago.`,
-  ].join(" ");
+    timing.mode === "subject_to_stock"
+      ? `IMPORTANTE: como este pedido se tomó después del cierre normal de la semana (jueves 23:59) para entrega mañana, avisale también al cliente que queda sujeto a stock disponible, y que alguien del equipo de Bakery Box le va a confirmar en breve si tenemos stock para entregarle mañana.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 export const CANCEL_ORDER_TOOL: Anthropic.Tool = {
   name: "cancel_order",

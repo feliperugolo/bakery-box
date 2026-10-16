@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { formatPrice } from "@/lib/format";
-import { getDeliveryDayOptions } from "@/lib/delivery";
+import { getDeliveryDayOptions, getWeeklyCutoffWindow, formatDeliveryDate } from "@/lib/delivery";
 import { WhatsappMessage } from "@/lib/types";
 import { CREATE_ORDER_TOOL, runCreateOrder, NOTIFY_TEAM_TOOL, runNotifyTeam, CANCEL_ORDER_TOOL, runCancelOrder } from "./tools";
 
@@ -72,6 +72,19 @@ async function buildSystemPrompt(supabase: AnySupabaseClient): Promise<string> {
     .map((d) => `${d.value} (${d.label})`)
     .join(", ");
 
+  const cutoff = getWeeklyCutoffWindow();
+  const tomorrowLabel = formatDeliveryDate(cutoff.tomorrowDateStr);
+  const nextMondayLabel = formatDeliveryDate(cutoff.nextMondayDateStr);
+  let weeklyCutoffNote: string;
+  if (cutoff.window === "normal") {
+    weeklyCutoffNote =
+      "Ahora mismo estamos dentro del ciclo normal de pedidos de la semana (tomamos pedidos con 48hs de anticipación, y el cierre normal de la semana es el jueves hasta las 23:59). No hace falta ninguna aclaración especial sobre stock o demoras: tomá cualquier fecha disponible con total normalidad.";
+  } else if (cutoff.window === "friday_stock") {
+    weeklyCutoffNote = `Ya pasó el cierre normal de la semana (jueves 23:59) — estamos en la ventana del viernes hasta las 18:00. Si el cliente pide que le entreguemos MAÑANA (${tomorrowLabel}), explicale que por haber pedido después del cierre normal, ese pedido queda sujeto a stock disponible, y que alguien del equipo de Bakery Box le va a confirmar en breve si hay stock para entregarle mañana. Igual podés tomarle el pedido con create_order con total normalidad — el sistema ya lo marca para que el equipo lo revise. Si en cambio pide entrega para más adelante que mañana, no hace falta esta aclaración: tomalo con total normalidad.`;
+  } else {
+    weeklyCutoffNote = `Ya pasó el cierre de esta semana (viernes 18:00), así que no podemos conseguir nada para entregar antes del ${nextMondayLabel}. Si el cliente necesita recibirlo antes de esa fecha, explicale con buena onda que tomamos los pedidos con más anticipación, y proponele coordinar la entrega para el ${nextMondayLabel} en adelante — no llames a create_order para una fecha anterior a esa (vas a recibir un error si lo intentás). Si el cliente pide para el ${nextMondayLabel} o una fecha posterior, no hace falta ninguna aclaración: tomalo con total normalidad.`;
+  }
+
   const pickupAddress = settings?.pickup_address || "a coordinar";
   const bankInfo =
     settings?.bank_alias || settings?.bank_cbu
@@ -98,6 +111,8 @@ REGLAS ESTRICTAS SOBRE DESCUENTOS (muy importante, no las rompas):
 - Nunca reveles el nombre o el valor de un código antes de que el cliente lo haya escrito él mismo.
 
 Entregas: de lunes a sábado, nunca domingo. Próximas fechas disponibles (elegí junto con el cliente una de estas, formato YYYY-MM-DD): ${deliveryDays}
+
+CIERRE SEMANAL DE PEDIDOS (muy importante, respetalo siempre que se hable de fecha de entrega): ${weeklyCutoffNote}
 
 Punto de retiro: ${pickupAddress}
 Datos para transferencia: ${bankInfo}
