@@ -54,6 +54,8 @@ export async function insertMessage(
     sender: WhatsappSender;
     body: string;
     waMessageId?: string | null;
+    mediaPath?: string | null;
+    mediaType?: string | null;
   }
 ) {
   const { error } = await supabase.from("whatsapp_messages").insert({
@@ -62,6 +64,8 @@ export async function insertMessage(
     sender: args.sender,
     body: args.body,
     wa_message_id: args.waMessageId || null,
+    media_path: args.mediaPath || null,
+    media_type: args.mediaType || null,
   });
 
   if (error) {

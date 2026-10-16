@@ -125,5 +125,7 @@ export type WhatsappMessage = {
   sender: WhatsappSender;
   body: string;
   wa_message_id: string | null;
+  media_path: string | null;
+  media_type: string | null;
   created_at: string;
 };

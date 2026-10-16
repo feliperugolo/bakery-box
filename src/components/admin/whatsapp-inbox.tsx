@@ -19,6 +19,48 @@ function displayName(conv: WhatsappConversation) {
   return conv.customer_name?.trim() || conv.phone_number;
 }
 
+/**
+ * Las fotos que mandan los clientes (ej: comprobantes de pago) se guardan en
+ * un bucket privado de Storage, así que no hay una URL pública fija para
+ * usar directo en un <img>: hay que pedirle a Supabase una URL firmada
+ * (temporal) cada vez que se muestra. Por eso esto es su propio componente
+ * en vez de solo un <img src=...>.
+ */
+function WhatsappMediaImage({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const supabase = createClient();
+    supabase.storage
+      .from("whatsapp-media")
+      .createSignedUrl(path, 60 * 60)
+      .then(({ data }) => {
+        if (active && data?.signedUrl) setUrl(data.signedUrl);
+      });
+    return () => {
+      active = false;
+    };
+  }, [path]);
+
+  if (!url) {
+    return (
+      <div className="mb-1.5 flex h-32 w-40 items-center justify-center rounded-lg bg-brown-900/10 text-xs text-brown-800/50">
+        Cargando imagen…
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt="Imagen enviada por el cliente"
+      className="mb-1.5 max-h-64 max-w-full rounded-lg object-contain"
+    />
+  );
+}
+
 export default function WhatsappInbox({
   initialConversations,
 }: {
@@ -321,6 +363,7 @@ export default function WhatsappInbox({
                               : "bg-gold-500/90 text-white"
                         }`}
                       >
+                        {msg.media_path && <WhatsappMediaImage path={msg.media_path} />}
                         <p>{msg.body}</p>
                         <div
                           className={`mt-1 flex items-center gap-1 text-[10px] ${

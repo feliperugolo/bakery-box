@@ -11,6 +11,7 @@ import {
 } from "@/lib/whatsapp/store";
 import { runBotTurn } from "@/lib/whatsapp/agent";
 import { sendWhatsappMessage } from "@/lib/whatsapp/send";
+import { downloadWhatsappMedia, classifyReceiptImage } from "@/lib/whatsapp/media";
 
 /**
  * Mensajes de WhatsApp que no son texto (audio, imagen, video, documento,
@@ -96,16 +97,54 @@ export async function POST(request: NextRequest) {
       change?.contacts?.[0]?.profile?.name;
     const isText = message.type === "text";
     const isReaction = message.type === "reaction";
+    const isImage = message.type === "image";
     const text: string = isText ? message.text?.body || "" : "";
 
     const supabase = createServiceClient();
     const { conversation, isNew } = await getOrCreateConversation(supabase, fromNumber, contactName);
 
+    // Si manda una foto, la bajamos de WhatsApp y la guardamos en Supabase
+    // Storage (así queda visible en el panel), y le pedimos a la IA que la
+    // mire solo para decidir si es un comprobante de pago/transferencia —
+    // esto es aparte del bot de charla normal. Si algo de esto falla (Meta
+    // no responde, etc.) seguimos igual: la imagen simplemente no se trata
+    // como comprobante y cae en el aviso genérico de "no puedo ver fotos".
+    let mediaPath: string | null = null;
+    let mediaType: string | null = null;
+    let isReceiptImage = false;
+    let receiptAmount: string | null = null;
+
+    if (isImage && message.image?.id) {
+      try {
+        const media = await downloadWhatsappMedia(message.image.id);
+        mediaType = media.mimeType;
+        const ext = (mediaType.split("/")[1] || "jpg").split("+")[0];
+        const candidatePath = `${conversation.id}/${waMessageId}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("whatsapp-media")
+          .upload(candidatePath, media.buffer, { contentType: mediaType, upsert: true });
+
+        if (uploadError) {
+          console.error("Error subiendo imagen de WhatsApp a Storage:", uploadError);
+        } else {
+          mediaPath = candidatePath;
+          const classification = await classifyReceiptImage(media.buffer.toString("base64"), mediaType);
+          isReceiptImage = classification.isReceipt;
+          receiptAmount = classification.amount;
+        }
+      } catch (err) {
+        console.error("Error procesando imagen de WhatsApp:", err);
+      }
+    }
+
     const inboundPreview = isText
       ? text
       : isReaction
         ? reactionPreview(message)
-        : nonTextPreview(message.type);
+        : isReceiptImage
+          ? `🧾 Envió un comprobante de pago${receiptAmount ? ` (${receiptAmount})` : ""}`
+          : nonTextPreview(message.type);
 
     const { duplicate } = await insertMessage(supabase, {
       conversationId: conversation.id,
@@ -113,6 +152,8 @@ export async function POST(request: NextRequest) {
       sender: "customer",
       body: inboundPreview,
       waMessageId,
+      mediaPath,
+      mediaType,
     });
 
     if (duplicate) {
@@ -141,8 +182,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const inboundBody = isText ? text : nonTextPreview(message.type);
-    if (await isRepeatingLoop(supabase, conversation.id, inboundBody)) {
+    if (await isRepeatingLoop(supabase, conversation.id, inboundPreview)) {
       // Del otro lado hay algo (probablemente otro sistema automático, no
       // una persona) contestando siempre lo mismo: si seguimos respondiendo
       // quedamos en un bucle infinito entre bots. Frenamos al bot acá,
@@ -167,9 +207,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (!isText) {
+    if (!isText && !isReceiptImage) {
       // No sabemos procesar audios, imágenes, etc: avisarle al cliente que
-      // nos escriba en texto en vez de dejarlo sin respuesta.
+      // nos escriba en texto en vez de dejarlo sin respuesta. Una foto que
+      // SÍ reconocimos como comprobante de pago no entra aquí — sigue de
+      // largo hasta el bot normal, más abajo.
       const replyText = nonTextReply(isNew);
       const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
       await insertMessage(supabase, {
@@ -196,6 +238,12 @@ export async function POST(request: NextRequest) {
     try {
       const history = await getRecentMessages(supabase, conversation.id, 20);
 
+      const botIncomingText = isReceiptImage
+        ? `[Mensaje del sistema, no del cliente: mandó una foto que parece ser un comprobante de pago o transferencia bancaria.${
+            receiptAmount ? ` Monto que se llegó a leer en la imagen: ${receiptAmount}.` : " No se pudo leer el monto con claridad."
+          } Agradecele de forma breve y cálida, y avisale que el equipo va a confirmar la recepción del pago. No llames a create_order, cancel_order ni notify_team por este mensaje.]`
+        : text;
+
       let replyText: string;
       let aiFailed = false;
       try {
@@ -203,7 +251,7 @@ export async function POST(request: NextRequest) {
           supabase,
           customerPhone: fromNumber,
           history: history.slice(0, -1), // el mensaje que acabamos de guardar ya va como incomingText
-          incomingText: text,
+          incomingText: botIncomingText,
         });
       } catch (err) {
         // Si falla la IA (sin crédito, caída del servicio, etc.) no dejamos al
@@ -226,7 +274,7 @@ export async function POST(request: NextRequest) {
       });
       await touchConversation(supabase, conversation.id, { preview: replyText });
 
-      if (aiFailed) {
+      if (aiFailed || isReceiptImage) {
         await supabase
           .from("whatsapp_conversations")
           .update({ needs_attention: true })
