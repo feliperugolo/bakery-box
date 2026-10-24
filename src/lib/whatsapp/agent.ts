@@ -73,20 +73,23 @@ async function buildSystemPrompt(supabase: AnySupabaseClient): Promise<string> {
     .join(", ");
 
   const cutoff = getWeeklyCutoffWindow();
+  const todayLabel = formatDeliveryDate(cutoff.todayDateStr);
   const tomorrowLabel = formatDeliveryDate(cutoff.tomorrowDateStr);
   const nextMondayLabel = formatDeliveryDate(cutoff.nextMondayDateStr);
   // OJO: estas notas son para el BOT, no son texto para copiar y pegar.
   // Nunca deben mencionarle al cliente horarios de corte internos ni
-  // "ventanas" (jueves 23:59, viernes 18:00, etc) — queda poco comercial.
-  // De cara al cliente, todo se explica en términos de la política general
-  // (pedimos con 48hs de anticipación) y, si corresponde, de que el sábado
-  // puntual que pidió queda sujeto a stock.
+  // "ventanas" (jueves 23:59, viernes 18:00, sábado 13:00, etc) — queda
+  // poco comercial. De cara al cliente, todo se explica en términos de la
+  // política general (pedimos con 48hs de anticipación) y, si corresponde,
+  // de que esa entrega puntual queda sujeta a stock.
   let weeklyCutoffNote: string;
   if (cutoff.window === "normal") {
     weeklyCutoffNote =
       "No hace falta ninguna aclaración especial sobre stock ahora mismo: tomá cualquier fecha disponible con total normalidad. Si el cliente pregunta por los tiempos de entrega, contale simplemente que tomamos pedidos con 48hs de anticipación.";
   } else if (cutoff.window === "friday_stock") {
     weeklyCutoffNote = `Si el cliente pide que le entreguemos MAÑANA (${tomorrowLabel}), contale con naturalidad —sin mencionar horarios de corte ni "ventanas" internas— que tomamos pedidos con 48hs de anticipación, y que como pide para recibir mañana, ese pedido en particular queda sujeto a stock disponible: alguien del equipo de Bakery Box le va a confirmar en breve si tenemos stock para entregarle mañana. Igual podés tomarle el pedido con create_order con total normalidad — el sistema ya lo marca para que el equipo lo revise. Si en cambio pide entrega para más adelante que mañana, no hace falta esta aclaración: tomalo con total normalidad.`;
+  } else if (cutoff.window === "saturday_stock") {
+    weeklyCutoffNote = `Hoy es sábado. Si el cliente pide o pregunta por entrega para HOY MISMO (${todayLabel}) —por ejemplo pide una torta para hoy, o pregunta si entregamos hoy—, contale con naturalidad —sin mencionar horarios de corte internos— que tomamos pedidos con 48hs de anticipación, y que como pide para recibir hoy, ese pedido en particular queda sujeto a stock disponible: en breve el equipo de Bakery Box le va a confirmar qué tenemos disponible para entregarle hoy. Igual podés tomarle el pedido con create_order con total normalidad — el sistema ya lo marca para que el equipo lo revise. Si en cambio pide entrega para otro día (lunes en adelante), no hace falta esta aclaración: tomalo con total normalidad.`;
   } else {
     weeklyCutoffNote = `Si el cliente necesita recibirlo antes del ${nextMondayLabel}, contale con buena onda —sin mencionar horarios de corte internos— que tomamos los pedidos con 48hs de anticipación y que no llegamos a conseguirle algo para esa fecha, y proponele coordinar la entrega para el ${nextMondayLabel} en adelante. No llames a create_order para una fecha anterior a esa (vas a recibir un error si lo intentás). Si el cliente pide para el ${nextMondayLabel} o una fecha posterior, no hace falta ninguna aclaración: tomalo con total normalidad.`;
   }
@@ -115,6 +118,8 @@ REGLAS ESTRICTAS SOBRE DESCUENTOS (muy importante, no las rompas):
 - Si el cliente pregunta en general si hay descuentos o promociones, respondé simplemente que si tiene un código se lo aplicás, sin decir cuáles existen ni sus valores.
 - Cuando el cliente te pase un código, compará contra la lista de arriba: si coincide, aplicalo; si no coincide o no existe, decile amablemente que ese código no es válido, sin revelar cuáles sí lo son ni sus valores.
 - Nunca reveles el nombre o el valor de un código antes de que el cliente lo haya escrito él mismo.
+
+Hoy es ${todayLabel} (fecha y hora de Argentina) — si necesitás mencionar la fecha de hoy, usá siempre este dato exacto, nunca lo calcules ni lo adivines por tu cuenta.
 
 Entregas: de lunes a sábado, nunca domingo. Próximas fechas disponibles (elegí junto con el cliente una de estas, formato YYYY-MM-DD): ${deliveryDays}
 

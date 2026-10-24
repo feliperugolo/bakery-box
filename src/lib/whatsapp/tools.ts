@@ -132,7 +132,7 @@ export async function runCreateOrder(
   // haya equivocado.
   const timing = evaluateOrderTiming(input.delivery_date);
   if (timing.mode === "too_late") {
-    return `Error: no se puede tomar un pedido para el ${input.delivery_date} — ya pasó el cierre de esta semana (viernes 18hs) y esa fecha es anterior al ${timing.nextMondayDateStr}. NO llames a create_order de nuevo con esta fecha. Explicale al cliente, con buena onda, que tomamos los pedidos con más anticipación, y proponele coordinar la entrega para el ${formatDeliveryDate(timing.nextMondayDateStr)} en adelante.`;
+    return `Error: no se puede tomar un pedido para el ${input.delivery_date} — ya pasó la ventana para tomar pedidos sujetos a stock para esa fecha, y es anterior al ${timing.nextMondayDateStr}. NO llames a create_order de nuevo con esta fecha. Explicale al cliente, con buena onda, que tomamos los pedidos con más anticipación, y proponele coordinar la entrega para el ${formatDeliveryDate(timing.nextMondayDateStr)} en adelante.`;
   }
 
   const slugs = input.items.map((i) => i.product_slug);
@@ -302,8 +302,8 @@ export async function runCreateOrder(
     customer_name: input.customer_name,
   };
   if (timing.mode === "subject_to_stock") {
-    // Pedido para entregar mañana, tomado después del cierre normal de la
-    // semana (jueves 23:59): queda sujeto a stock, hay que avisarle al
+    // Pedido para entregar hoy o mañana (sábado), tomado fuera del ciclo
+    // normal de la semana: queda sujeto a stock, hay que avisarle al
     // equipo para que confirme disponibilidad.
     conversationUpdate.needs_attention = true;
   }
@@ -325,7 +325,7 @@ export async function runCreateOrder(
       : `Total ${formatPrice(total)}.`,
     `Ahora confirmale al cliente que el pedido quedó registrado, con el total final y los próximos pasos según la forma de pago.`,
     timing.mode === "subject_to_stock"
-      ? `IMPORTANTE: como este pedido se tomó después del cierre normal de la semana (jueves 23:59) para entrega mañana, avisale también al cliente que queda sujeto a stock disponible, y que alguien del equipo de Bakery Box le va a confirmar en breve si tenemos stock para entregarle mañana.`
+      ? `IMPORTANTE: como la fecha de entrega pedida (${input.delivery_date}) cae fuera del ciclo normal de la semana, avisale también al cliente que ese pedido queda sujeto a stock disponible, y que alguien del equipo de Bakery Box le va a confirmar en breve qué tenemos disponible para esa entrega.`
       : "",
   ]
     .filter(Boolean)

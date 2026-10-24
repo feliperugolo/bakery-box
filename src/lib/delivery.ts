@@ -55,10 +55,12 @@ export function formatDeliveryDate(value: string | null | undefined): string {
 // sábado, el último momento para pedir "con normalidad" en la semana es el
 // jueves hasta las 23:59. Desde el viernes y hasta las 18:00 todavía se
 // puede tomar un pedido para entregar al día siguiente (sábado), pero queda
-// sujeto a stock disponible — alguien del equipo lo confirma. Pasadas las
-// 18:00 del viernes (y durante el resto del fin de semana), ya no se puede
-// conseguir nada para antes del lunes siguiente: hay que pedir con más
-// anticipación.
+// sujeto a stock disponible — alguien del equipo lo confirma. Lo mismo pasa
+// el propio sábado hasta la 13:00 para entregar ESE MISMO día: también
+// queda sujeto a stock, el equipo confirma qué hay disponible para hoy.
+// Pasado ese momento (sábado después de las 13:00, domingo, o viernes
+// después de las 18:00 para fechas más próximas), ya no se puede conseguir
+// nada para antes del lunes siguiente: hay que pedir con más anticipación.
 //
 // Todo esto se calcula siempre en hora de Argentina, sin importar en qué
 // huso horario corra el servidor (Netlify corre en UTC).
@@ -111,7 +113,7 @@ function addDays(dateStr: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export type WeeklyCutoffWindow = "normal" | "friday_stock" | "weekend_late";
+export type WeeklyCutoffWindow = "normal" | "friday_stock" | "saturday_stock" | "weekend_late";
 
 /**
  * En qué momento de la semana (hora Argentina) estamos ahora, sin todavía
@@ -121,28 +123,37 @@ export type WeeklyCutoffWindow = "normal" | "friday_stock" | "weekend_late";
  */
 export function getWeeklyCutoffWindow(now: Date = new Date()): {
   window: WeeklyCutoffWindow;
+  todayDateStr: string;
   tomorrowDateStr: string;
   nextMondayDateStr: string;
 } {
   const ba = getBuenosAiresParts(now);
+  const todayDateStr = ba.dateStr;
   const tomorrowDateStr = addDays(ba.dateStr, 1);
   const daysUntilMonday = ((1 - ba.dayOfWeek + 7) % 7) || 7;
   const nextMondayDateStr = addDays(ba.dateStr, daysUntilMonday);
 
   // Lunes a jueves: ciclo normal de pedidos de la semana.
   if (ba.dayOfWeek >= 1 && ba.dayOfWeek <= 4) {
-    return { window: "normal", tomorrowDateStr, nextMondayDateStr };
+    return { window: "normal", todayDateStr, tomorrowDateStr, nextMondayDateStr };
   }
 
   if (ba.dayOfWeek === 5) {
     const pastFridayCutoff = ba.hour > 18 || (ba.hour === 18 && ba.minute > 0);
     if (!pastFridayCutoff) {
-      return { window: "friday_stock", tomorrowDateStr, nextMondayDateStr };
+      return { window: "friday_stock", todayDateStr, tomorrowDateStr, nextMondayDateStr };
     }
   }
 
-  // Viernes después de las 18:00, sábado o domingo.
-  return { window: "weekend_late", tomorrowDateStr, nextMondayDateStr };
+  if (ba.dayOfWeek === 6) {
+    const pastSaturdayCutoff = ba.hour >= 13;
+    if (!pastSaturdayCutoff) {
+      return { window: "saturday_stock", todayDateStr, tomorrowDateStr, nextMondayDateStr };
+    }
+  }
+
+  // Viernes después de las 18:00, sábado después de las 13:00, o domingo.
+  return { window: "weekend_late", todayDateStr, tomorrowDateStr, nextMondayDateStr };
 }
 
 export type OrderTimingMode = "normal" | "subject_to_stock" | "too_late";
@@ -156,15 +167,17 @@ export type OrderTimingMode = "normal" | "subject_to_stock" | "too_late";
 export function evaluateOrderTiming(
   deliveryDateStr: string,
   now: Date = new Date()
-): { mode: OrderTimingMode; tomorrowDateStr: string; nextMondayDateStr: string } {
-  const { window, tomorrowDateStr, nextMondayDateStr } = getWeeklyCutoffWindow(now);
+): { mode: OrderTimingMode; todayDateStr: string; tomorrowDateStr: string; nextMondayDateStr: string } {
+  const { window, todayDateStr, tomorrowDateStr, nextMondayDateStr } = getWeeklyCutoffWindow(now);
 
   let mode: OrderTimingMode = "normal";
   if (window === "friday_stock" && deliveryDateStr === tomorrowDateStr) {
+    mode = "subject_to_stock";
+  } else if (window === "saturday_stock" && deliveryDateStr === todayDateStr) {
     mode = "subject_to_stock";
   } else if (window === "weekend_late" && deliveryDateStr < nextMondayDateStr) {
     mode = "too_late";
   }
 
-  return { mode, tomorrowDateStr, nextMondayDateStr };
+  return { mode, todayDateStr, tomorrowDateStr, nextMondayDateStr };
 }
