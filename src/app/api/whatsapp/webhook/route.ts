@@ -12,6 +12,7 @@ import {
 import { runBotTurn } from "@/lib/whatsapp/agent";
 import { sendWhatsappMessage } from "@/lib/whatsapp/send";
 import { downloadWhatsappMedia, classifyReceiptMedia } from "@/lib/whatsapp/media";
+import { notifyTeamPush } from "@/lib/push";
 
 /**
  * Mensajes de WhatsApp que no son texto (audio, imagen, video, documento,
@@ -185,6 +186,7 @@ export async function POST(request: NextRequest) {
         .from("whatsapp_conversations")
         .update({ needs_attention: true })
         .eq("id", conversation.id);
+      await notifyTeamPush(supabase);
       return NextResponse.json({ ok: true });
     }
 
@@ -198,6 +200,7 @@ export async function POST(request: NextRequest) {
         .from("whatsapp_conversations")
         .update({ bot_paused: true, needs_attention: true })
         .eq("id", conversation.id);
+      await notifyTeamPush(supabase);
 
       const replyText =
         "Parece que estamos teniendo problemas para entendernos por acá. Avisé al equipo de Bakery Box para que te escriba directamente. ¡Gracias por tu paciencia!";
@@ -285,6 +288,7 @@ export async function POST(request: NextRequest) {
           .from("whatsapp_conversations")
           .update({ needs_attention: true })
           .eq("id", conversation.id);
+        await notifyTeamPush(supabase);
       }
     } finally {
       if (lockAcquired) {

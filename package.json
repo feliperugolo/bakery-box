@@ -18,6 +18,7 @@
     "@fontsource/poppins": "^5.3.0",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "web-push": "^3.6.7",
     "clsx": "^2.1.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

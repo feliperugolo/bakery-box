@@ -59,6 +59,69 @@ function playAttentionBeep() {
   }
 }
 
+// Convierte la clave pública VAPID (base64url) al formato Uint8Array que
+// pide PushManager.subscribe().
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+// Registra el service worker del panel y suscribe este dispositivo a
+// notificaciones push, guardando la suscripción en Supabase para que el
+// servidor le pueda avisar cuando una charla necesita al equipo — esto es
+// lo que hace que llegue el aviso y el numerito rojo aunque la app esté
+// cerrada.
+async function subscribeToPush() {
+  try {
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      Notification.permission !== "granted"
+    ) {
+      return;
+    }
+
+    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!vapidPublicKey) return;
+
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
+      });
+    }
+
+    const subJson = subscription.toJSON();
+    if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) return;
+
+    const supabase = createClient();
+    await supabase.from("push_subscriptions").upsert(
+      {
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys.p256dh,
+        auth: subJson.keys.auth,
+      },
+      { onConflict: "endpoint" }
+    );
+  } catch (err) {
+    // Si falla la suscripción (navegador sin soporte, PWA no instalada
+    // todavía, etc.) no rompemos el panel — el aviso sonoro/visual con la
+    // app abierta sigue funcionando igual.
+    console.error("No se pudo suscribir a notificaciones push:", err);
+  }
+}
+
 export default function AdminSidebar({ email }: { email: string }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -73,6 +136,9 @@ export default function AdminSidebar({ email }: { email: string }) {
     if (typeof Notification === "undefined") return;
     const result = await Notification.requestPermission();
     setNotifPermission(result);
+    if (result === "granted") {
+      await subscribeToPush();
+    }
   };
 
   useEffect(() => {
@@ -81,6 +147,12 @@ export default function AdminSidebar({ email }: { email: string }) {
     (async () => {
       if (typeof Notification !== "undefined") {
         setNotifPermission(Notification.permission);
+        if (Notification.permission === "granted") {
+          // Ya tenía el permiso concedido de antes: nos asegura que la
+          // suscripción push siga existiendo (por ejemplo si la borraron
+          // del lado del servidor, o es un dispositivo nuevo).
+          subscribeToPush();
+        }
       }
 
       const { data } = await supabase
@@ -127,6 +199,26 @@ export default function AdminSidebar({ email }: { email: string }) {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Mantiene el numerito rojo del ícono de la app (pantalla de inicio en
+  // iOS, dock/taskbar en desktop) sincronizado mientras el panel está
+  // abierto. Esto es un complemento del aviso por push — cubre el caso en
+  // que el panel ya está abierto y no hace falta esperar la ida y vuelta
+  // de una notificación push para actualizar el numerito.
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = navigator as any;
+      if (!nav.setAppBadge) return;
+      if (attentionCount > 0) {
+        nav.setAppBadge(attentionCount).catch(() => {});
+      } else if (nav.clearAppBadge) {
+        nav.clearAppBadge().catch(() => {});
+      }
+    } catch {
+      // Badging API no soportada en este navegador — no hacemos nada.
+    }
+  }, [attentionCount]);
 
   const handleLogout = async () => {
     const supabase = createClient();

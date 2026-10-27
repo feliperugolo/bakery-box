@@ -21,6 +21,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: siteTitle,
   description: siteDescription,
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Bakery Box",
+  },
   openGraph: {
     title: siteTitle,
     description: siteDescription,
@@ -36,6 +42,10 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport = {
+  themeColor: "#34200f",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -43,6 +53,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className="h-full antialiased">
+      <head>
+        {/* iOS no lee bien el campo "icons" del manifest para el ícono de
+            pantalla de inicio: hace falta este link aparte. */}
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+      </head>
       <body className="min-h-full flex flex-col bg-cream">
         {/* Meta Pixel Code */}
         <noscript>

@@ -3,6 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { formatPrice } from "@/lib/format";
 import { phoneNumbersMatch } from "@/lib/phone";
 import { evaluateOrderTiming, formatDeliveryDate } from "@/lib/delivery";
+import { notifyTeamPush } from "@/lib/push";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabaseClient = SupabaseClient<any, any, any>;
@@ -101,6 +102,8 @@ export async function runNotifyTeam(
   if (error) {
     return `No se pudo marcar la charla para el equipo (${error.message}), pero igual respondele al cliente con normalidad.`;
   }
+
+  await notifyTeamPush(supabase);
 
   return `Listo, quedó marcada para que el equipo la revise${input.reason ? `: ${input.reason}` : ""}.`;
 }
@@ -311,6 +314,10 @@ export async function runCreateOrder(
     .from("whatsapp_conversations")
     .update(conversationUpdate)
     .eq("phone_number", customerPhone);
+
+  if (timing.mode === "subject_to_stock") {
+    await notifyTeamPush(supabase);
+  }
 
   const lines = resolvedItems.map(
     (i) =>
