@@ -155,14 +155,18 @@ export default function AdminSidebar({ email }: { email: string }) {
         }
       }
 
+      await loadAttention();
+      initialized.current = true;
+    })();
+
+    async function loadAttention() {
       const { data } = await supabase
         .from("whatsapp_conversations")
         .select("id")
         .eq("needs_attention", true);
       knownAttentionIds.current = new Set((data || []).map((c: { id: string }) => c.id));
       setAttentionCount(knownAttentionIds.current.size);
-      initialized.current = true;
-    })();
+    }
 
     const channel = supabase
       .channel("whatsapp_conversations_attention")
@@ -195,7 +199,22 @@ export default function AdminSidebar({ email }: { email: string }) {
       )
       .subscribe();
 
+    // La conexión de Realtime se puede quedar "dormida" sin avisar cuando el
+    // celular bloquea la pantalla o manda la app a segundo plano un rato
+    // largo. Cada vez que el panel vuelve a primer plano, releemos el
+    // conteo de una para no depender solo del socket — así el numerito y
+    // el badge del ícono nunca quedan desactualizados sin un refresh manual.
+    const handleVisible = () => {
+      if (document.visibilityState === "visible") loadAttention();
+    };
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    window.addEventListener("online", handleVisible);
+
     return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+      window.removeEventListener("online", handleVisible);
       supabase.removeChannel(channel);
     };
   }, []);
