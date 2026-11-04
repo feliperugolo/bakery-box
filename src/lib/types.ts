@@ -128,4 +128,8 @@ export type WhatsappMessage = {
   media_path: string | null;
   media_type: string | null;
   created_at: string;
+  // "sent" | "delivered" | "read" | "failed" | null (null = todavía no llegó
+  // ningún estado de Meta, o es un mensaje entrante que no aplica).
+  delivery_status: string | null;
+  delivery_error: string | null;
 };

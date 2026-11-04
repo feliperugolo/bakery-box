@@ -87,7 +87,61 @@ export async function POST(request: NextRequest) {
     const change = entry?.changes?.[0]?.value;
     const message = change?.messages?.[0];
 
-    // Puede llegar un evento sin mensaje (ej: confirmación de lectura) — no hay nada que hacer.
+    // Actualizaciones de ESTADO de un mensaje que mandamos nosotros (sent,
+    // delivered, read, failed) — no son mensajes de un cliente. Son clave
+    // para enterarnos cuando algo no llega de verdad (ej: le escribimos a
+    // alguien que no nos habló en las últimas 24hs, o un número inválido):
+    // sin esto, un mensaje "fallido" se veía igual que uno entregado.
+    const statuses = change?.statuses as
+      | Array<{
+          id: string;
+          status: string;
+          errors?: { code?: number; title?: string; message?: string }[];
+        }>
+      | undefined;
+
+    if (statuses && statuses.length > 0) {
+      const supabase = createServiceClient();
+      let anyFailed = false;
+
+      for (const s of statuses) {
+        const firstError = s.errors?.[0];
+        const deliveryError = firstError
+          ? `(#${firstError.code ?? "?"}) ${firstError.title || firstError.message || "Error desconocido"}`
+          : null;
+
+        if (s.status === "failed") {
+          anyFailed = true;
+          console.error(`Mensaje de WhatsApp ${s.id} falló al entregarse:`, deliveryError || JSON.stringify(s));
+        }
+
+        const { data: updated, error } = await supabase
+          .from("whatsapp_messages")
+          .update({ delivery_status: s.status, delivery_error: deliveryError })
+          .eq("wa_message_id", s.id)
+          .select("conversation_id")
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error guardando el estado de entrega de un mensaje de WhatsApp:", error);
+        } else if (s.status === "failed" && updated?.conversation_id) {
+          // Un mensaje que no llegó de verdad necesita que alguien del
+          // equipo lo note y reintente a mano (ej: mandando una plantilla
+          // si ya pasaron las 24hs) — si no, queda ahí sin que nadie se
+          // entere.
+          await supabase
+            .from("whatsapp_conversations")
+            .update({ needs_attention: true })
+            .eq("id", updated.conversation_id);
+          await notifyTeamPush(supabase);
+        }
+      }
+
+      return NextResponse.json({ ok: true, failed: anyFailed });
+    }
+
+    // Puede llegar un evento sin mensaje y sin estados (ej: otro tipo de
+    // notificación que no usamos) — no hay nada que hacer.
     if (!message) {
       return NextResponse.json({ ok: true });
     }

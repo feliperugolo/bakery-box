@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus } from "lucide-react";
+import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus, TriangleAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
 import StartConversationModal from "./start-conversation-modal";
@@ -251,6 +251,21 @@ export default function WhatsappInbox({
           setMessages((prev) => reconcileMessage(prev, payload.new as WhatsappMessage));
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "whatsapp_messages",
+          filter: `conversation_id=eq.${selectedId}`,
+        },
+        (payload) => {
+          // Esto es lo que trae, por ejemplo, el estado de entrega real de
+          // Meta (delivered/failed) una vez que llega su webhook.
+          const row = payload.new as WhatsappMessage;
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? row : m)));
+        }
+      )
       .subscribe();
 
     // Mismo motivo que en la lista de conversaciones: al volver a primer
@@ -314,6 +329,8 @@ export default function WhatsappInbox({
         media_path: null,
         media_type: null,
         created_at: nowIso,
+        delivery_status: null,
+        delivery_error: null,
       },
     ]);
     setConversations((prev) =>
@@ -492,20 +509,23 @@ export default function WhatsappInbox({
                 {messages.map((msg) => {
                   const fromCustomer = msg.direction === "inbound";
                   const isPending = msg.id.startsWith(OPTIMISTIC_PREFIX);
+                  const failed = !fromCustomer && msg.delivery_status === "failed";
                   return (
                     <div
                       key={msg.id}
-                      className={`flex ${fromCustomer ? "justify-start" : "justify-end"}`}
+                      className={`flex flex-col ${fromCustomer ? "items-start" : "items-end"}`}
                     >
                       <div
                         className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
                           isPending ? "opacity-60" : ""
                         } ${
-                          fromCustomer
-                            ? "bg-cream-dark text-brown-900"
-                            : msg.sender === "admin"
-                              ? "bg-brown-900 text-cream"
-                              : "bg-gold-500/90 text-white"
+                          failed
+                            ? "border border-red-400 bg-red-500/10 text-brown-900"
+                            : fromCustomer
+                              ? "bg-cream-dark text-brown-900"
+                              : msg.sender === "admin"
+                                ? "bg-brown-900 text-cream"
+                                : "bg-gold-500/90 text-white"
                         }`}
                       >
                         {msg.media_path && (
@@ -514,7 +534,7 @@ export default function WhatsappInbox({
                         <p>{msg.body}</p>
                         <div
                           className={`mt-1 flex items-center gap-1 text-[10px] ${
-                            fromCustomer ? "text-brown-800/40" : "text-white/70"
+                            failed ? "text-red-600" : fromCustomer ? "text-brown-800/40" : "text-white/70"
                           }`}
                         >
                           {!fromCustomer &&
@@ -526,6 +546,16 @@ export default function WhatsappInbox({
                           {isPending ? "Enviando…" : timeLabel(msg.created_at)}
                         </div>
                       </div>
+                      {failed && (
+                        <p
+                          className="mt-1 flex items-center gap-1 text-[10px] font-medium text-red-600"
+                          title={msg.delivery_error || undefined}
+                        >
+                          <TriangleAlert className="h-3 w-3 shrink-0" />
+                          No se pudo entregar
+                          {msg.delivery_error ? ` — ${msg.delivery_error}` : ""}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
