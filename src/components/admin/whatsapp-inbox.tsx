@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus, TriangleAlert, Check, CheckCheck, Clock, Paperclip, Reply, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
-import StartConversationModal from "./start-conversation-modal";
+import TemplateModal from "./template-modal";
 
 function timeLabel(iso: string) {
   return new Date(iso).toLocaleString("es-AR", {
@@ -174,6 +174,7 @@ export default function WhatsappInbox({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showNewContact, setShowNewContact] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const optimisticCounter = useRef(0);
   const [replyTo, setReplyTo] = useState<WhatsappMessage | null>(null);
@@ -476,7 +477,8 @@ export default function WhatsappInbox({
           Mandar primer mensaje
         </button>
         {showNewContact && (
-          <StartConversationModal
+          <TemplateModal
+            mode="new"
             onClose={() => setShowNewContact(false)}
             onSent={(id) => {
               setShowNewContact(false);
@@ -574,24 +576,33 @@ export default function WhatsappInbox({
                 <p className="font-medium text-brown-900">{displayName(selected)}</p>
                 <p className="text-xs text-brown-800/50">+{selected.phone_number}</p>
               </div>
-              <button
-                onClick={togglePause}
-                className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
-                  selected.bot_paused
-                    ? "bg-gold-500 text-white hover:brightness-95"
-                    : "bg-cream-dark text-brown-800 hover:bg-brown-900/10"
-                }`}
-              >
-                {selected.bot_paused ? (
-                  <>
-                    <Play className="h-3.5 w-3.5" /> Reactivar bot
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-3.5 w-3.5" /> Tomar la charla
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowTemplateModal(true)}
+                  className="flex items-center gap-1.5 rounded-full bg-cream-dark px-3.5 py-2 text-xs font-semibold text-brown-800 transition hover:bg-brown-900/10"
+                  title="Mandar una plantilla aprobada por Meta (ej: si ya pasaron más de 24hs desde su último mensaje)"
+                >
+                  <FileText className="h-3.5 w-3.5" /> Plantilla
+                </button>
+                <button
+                  onClick={togglePause}
+                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                    selected.bot_paused
+                      ? "bg-gold-500 text-white hover:brightness-95"
+                      : "bg-cream-dark text-brown-800 hover:bg-brown-900/10"
+                  }`}
+                >
+                  {selected.bot_paused ? (
+                    <>
+                      <Play className="h-3.5 w-3.5" /> Reactivar bot
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="h-3.5 w-3.5" /> Tomar la charla
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4">
@@ -743,12 +754,23 @@ export default function WhatsappInbox({
       </div>
     </div>
     {showNewContact && (
-      <StartConversationModal
+      <TemplateModal
+        mode="new"
         onClose={() => setShowNewContact(false)}
         onSent={(id) => {
           setShowNewContact(false);
           setSelectedId(id);
         }}
+      />
+    )}
+    {showTemplateModal && selected && (
+      <TemplateModal
+        mode="existing"
+        conversationId={selected.id}
+        initialPhone={selected.phone_number}
+        initialName={selected.customer_name}
+        onClose={() => setShowTemplateModal(false)}
+        onSent={() => setShowTemplateModal(false)}
       />
     )}
     </>

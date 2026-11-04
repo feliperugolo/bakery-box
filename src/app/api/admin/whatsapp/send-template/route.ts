@@ -5,13 +5,16 @@ import { sendWhatsappTemplate } from "@/lib/whatsapp/send";
 import { toWhatsappPhone } from "@/lib/phone";
 
 /**
- * Arranca una conversación de WhatsApp con alguien que todavía no le
- * escribió a Bakery Box (ej: hizo un pedido en la página pero no llegó a
- * mandarlo por WhatsApp, o un contacto nuevo cualquiera). WhatsApp no deja
- * mandar texto libre en ese caso: el primer mensaje tiene que ser una
- * plantilla aprobada por Meta, por eso esto usa sendWhatsappTemplate en vez
- * de sendWhatsappMessage. El nombre/idioma de la plantilla se configuran
- * por variable de entorno porque dependen de cómo haya quedado aprobada.
+ * Manda una plantilla de WhatsApp aprobada por Meta, elegida a mano desde
+ * el panel (ver /api/admin/whatsapp/templates). Se usa en dos casos:
+ *  - Arrancar una conversación con alguien que todavía no le escribió a
+ *    Bakery Box (WhatsApp no deja mandar texto libre en ese caso).
+ *  - Mandarle una plantilla a un contacto que YA tiene conversación (ej:
+ *    pasaron más de 24hs desde su último mensaje y el texto libre no
+ *    entra). Para este caso se manda conversationId directo, así no hace
+ *    falta volver a buscar/crear la conversación por teléfono — esto es
+ *    justamente lo que evita que se duplique la charla (pasó en la
+ *    práctica: "Felipe" / "Felipe Rugolo").
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -23,34 +26,39 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { phoneNumber, customerName } = await request.json();
-  // Normalizamos acá (no solo en el modal) para que esto valga también si
-  // en el futuro se llama a este endpoint desde otro lado — el modal ya
-  // manda el teléfono tal cual lo tipeó el admin, con o sin código de país.
+  const {
+    conversationId,
+    phoneNumber,
+    customerName,
+    templateName,
+    languageCode,
+    params,
+  } = await request.json();
+
   const cleanPhone = toWhatsappPhone(phoneNumber || "");
   const name = (customerName || "").trim();
+  const bodyParams: { name: string; value: string }[] = Array.isArray(params) ? params : [];
 
   if (!cleanPhone) {
     return NextResponse.json({ error: "Falta el teléfono" }, { status: 400 });
   }
-  if (!name) {
-    return NextResponse.json(
-      { error: "Falta el nombre (la plantilla lo necesita)" },
-      { status: 400 }
-    );
+  if (!templateName || !languageCode) {
+    return NextResponse.json({ error: "Falta elegir la plantilla" }, { status: 400 });
+  }
+  // Para una conversación nueva (sin conversationId) necesitamos un nombre
+  // para poder guardar el contacto — para una que ya existe, no.
+  if (!conversationId && !name) {
+    return NextResponse.json({ error: "Falta el nombre del contacto" }, { status: 400 });
   }
 
-  const templateName = process.env.WHATSAPP_TEMPLATE_NAME || "primer_contacto_pedido";
-  const languageCode = process.env.WHATSAPP_TEMPLATE_LANG || "es_AR";
-
   try {
-    const { waMessageId } = await sendWhatsappTemplate(cleanPhone, templateName, languageCode, [
-      { name: "customer_name", value: name },
-    ]);
+    const { waMessageId } = await sendWhatsappTemplate(cleanPhone, templateName, languageCode, bodyParams);
 
-    const { conversation } = await getOrCreateConversation(supabase, cleanPhone, name);
+    const conversation = conversationId
+      ? { id: conversationId as string }
+      : (await getOrCreateConversation(supabase, cleanPhone, name)).conversation;
 
-    const previewText = `[Plantilla de WhatsApp enviada a ${name}]`;
+    const previewText = `[Plantilla "${templateName}" enviada]`;
     await insertMessage(supabase, {
       conversationId: conversation.id,
       direction: "outbound",

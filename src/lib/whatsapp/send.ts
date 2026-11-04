@@ -83,16 +83,21 @@ export async function sendWhatsappTemplate(
     );
   }
 
+  // Las plantillas nuevas (creadas en el WhatsApp Manager actual) usan
+  // parámetros CON NOMBRE (ej: {{customer_name}}) y necesitan mandar ese
+  // nombre exacto. Las plantillas viejas usan parámetros POSICIONALES (ej:
+  // {{1}}, {{2}}) e identificamos ese caso porque el "nombre" es un número
+  // — ahí no hay que mandar parameter_name, solo el texto en orden.
   const components =
     bodyParams.length > 0
       ? [
           {
             type: "body",
-            parameters: bodyParams.map((p) => ({
-              type: "text",
-              parameter_name: p.name,
-              text: p.value,
-            })),
+            parameters: bodyParams.map((p) =>
+              /^\d+$/.test(p.name)
+                ? { type: "text", text: p.value }
+                : { type: "text", parameter_name: p.name, text: p.value }
+            ),
           },
         ]
       : [];
