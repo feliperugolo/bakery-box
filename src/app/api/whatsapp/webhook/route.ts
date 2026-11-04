@@ -215,6 +215,9 @@ export async function POST(request: NextRequest) {
       waMessageId,
       mediaPath,
       mediaType,
+      // Si el cliente citó uno de nuestros mensajes al responder, WhatsApp
+      // lo manda acá — lo guardamos para poder mostrar esa cita en el panel.
+      replyToWaMessageId: message.context?.id || null,
     });
 
     if (duplicate) {

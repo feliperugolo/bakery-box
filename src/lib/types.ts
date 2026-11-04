@@ -132,4 +132,7 @@ export type WhatsappMessage = {
   // ningún estado de Meta, o es un mensaje entrante que no aplica).
   delivery_status: string | null;
   delivery_error: string | null;
+  // wa_message_id del mensaje al que este responde "citando" (reply), si
+  // corresponde — tanto si lo citó el cliente como si lo citó el admin.
+  reply_to_wa_message_id: string | null;
 };

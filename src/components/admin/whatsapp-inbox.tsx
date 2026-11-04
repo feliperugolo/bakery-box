@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus, TriangleAlert, Check, CheckCheck, Clock } from "lucide-react";
+import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus, TriangleAlert, Check, CheckCheck, Clock, Paperclip, Reply, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
 import StartConversationModal from "./start-conversation-modal";
@@ -140,6 +140,26 @@ function WhatsappMediaPreview({ path, mediaType }: { path: string; mediaType: st
   );
 }
 
+/**
+ * Mensaje citado ("responder" en WhatsApp): lo que se guarda es el
+ * wa_message_id del mensaje original, no el mensaje en sí — así que para
+ * mostrar la cita hay que buscarlo dentro de los mensajes que ya tenemos
+ * cargados en el hilo. Si el mensaje citado es muy viejo y no está en la
+ * ventana cargada, mostramos un texto genérico en vez de nada.
+ */
+function quotedMessageFor(messages: WhatsappMessage[], waMessageId: string | null): WhatsappMessage | null {
+  if (!waMessageId) return null;
+  return messages.find((m) => m.wa_message_id === waMessageId) || null;
+}
+
+function QuotedMessagePreview({ quoted }: { quoted: WhatsappMessage | null }) {
+  return (
+    <div className="mb-1.5 rounded-lg border-l-2 border-current/40 bg-black/5 px-2.5 py-1.5 text-xs opacity-80">
+      <p className="truncate">{quoted ? quoted.body || "Archivo" : "Mensaje original"}</p>
+    </div>
+  );
+}
+
 export default function WhatsappInbox({
   initialConversations,
 }: {
@@ -156,6 +176,9 @@ export default function WhatsappInbox({
   const [showNewContact, setShowNewContact] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const optimisticCounter = useRef(0);
+  const [replyTo, setReplyTo] = useState<WhatsappMessage | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selected = conversations.find((c) => c.id === selectedId) || null;
 
@@ -326,12 +349,15 @@ export default function WhatsappInbox({
   const send = async () => {
     if (!selected || !draft.trim() || sending) return;
     const body = draft.trim();
+    const replyToMsg = replyTo;
+    const replyToId = replyToMsg?.wa_message_id || null;
     const nowIso = new Date().toISOString();
     const optimisticId = `${OPTIMISTIC_PREFIX}${selected.id}-${optimisticCounter.current++}`;
 
     setSending(true);
     setError(null);
     setDraft("");
+    setReplyTo(null);
 
     // Mostramos el mensaje de una, sin esperar la ida y vuelta al servidor
     // (que primero le pega a la API de WhatsApp): así no se siente lento
@@ -351,6 +377,7 @@ export default function WhatsappInbox({
         created_at: nowIso,
         delivery_status: null,
         delivery_error: null,
+        reply_to_wa_message_id: replyToId,
       },
     ]);
     setConversations((prev) =>
@@ -374,6 +401,7 @@ export default function WhatsappInbox({
           conversationId: selected.id,
           phoneNumber: selected.phone_number,
           body,
+          replyToWaMessageId: replyToId,
         }),
       });
       const data = await res.json();
@@ -382,11 +410,53 @@ export default function WhatsappInbox({
       setError(err instanceof Error ? err.message : "No se pudo enviar");
       // No se pudo mandar en serio: sacamos el placeholder para no dejar
       // una burbuja "enviada" que en realidad nunca salió, y devolvemos el
-      // texto al cuadro para que no se pierda lo que había escrito.
+      // texto y la cita (si había) al cuadro para que no se pierda nada.
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setDraft(body);
+      setReplyTo(replyToMsg);
     } finally {
       setSending(false);
+    }
+  };
+
+  /**
+   * Mandar una foto o un documento adjunto. A diferencia de los mensajes de
+   * texto, no mostramos una burbuja optimista acá (el archivo puede tardar
+   * un par de segundos en subirse) — en cambio avisamos "Subiendo..." y la
+   * burbuja real aparece sola por Realtime cuando el servidor termina.
+   */
+  const sendMedia = async (file: File) => {
+    if (!selected || uploadingMedia) return;
+    const replyToMsg = replyTo;
+    const replyToId = replyToMsg?.wa_message_id || null;
+
+    setUploadingMedia(true);
+    setError(null);
+    setReplyTo(null);
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("conversationId", selected.id);
+      form.append("phoneNumber", selected.phone_number);
+      if (replyToId) form.append("replyToWaMessageId", replyToId);
+
+      const res = await fetch("/api/admin/whatsapp/send-media", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "No se pudo enviar el archivo");
+
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selected.id ? { ...c, bot_paused: true } : c))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo enviar el archivo");
+      setReplyTo(replyToMsg);
+    } finally {
+      setUploadingMedia(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -533,8 +603,9 @@ export default function WhatsappInbox({
                   return (
                     <div
                       key={msg.id}
-                      className={`flex flex-col ${fromCustomer ? "items-start" : "items-end"}`}
+                      className={`group flex flex-col ${fromCustomer ? "items-start" : "items-end"}`}
                     >
+                      <div className={`flex items-end gap-1 ${fromCustomer ? "" : "flex-row-reverse"}`}>
                       <div
                         className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
                           isPending ? "opacity-60" : ""
@@ -548,6 +619,11 @@ export default function WhatsappInbox({
                                 : "bg-gold-500/90 text-white"
                         }`}
                       >
+                        {msg.reply_to_wa_message_id && (
+                          <QuotedMessagePreview
+                            quoted={quotedMessageFor(messages, msg.reply_to_wa_message_id)}
+                          />
+                        )}
                         {msg.media_path && (
                           <WhatsappMediaPreview path={msg.media_path} mediaType={msg.media_type} />
                         )}
@@ -569,6 +645,16 @@ export default function WhatsappInbox({
                           )}
                         </div>
                       </div>
+                      {!isPending && (
+                        <button
+                          onClick={() => setReplyTo(msg)}
+                          aria-label="Responder citando este mensaje"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-brown-800/40 opacity-0 transition hover:bg-brown-900/10 hover:text-brown-800 group-hover:opacity-100"
+                        >
+                          <Reply className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      </div>
                       {failed && (
                         <p
                           className="mt-1 flex items-center gap-1 text-[10px] font-medium text-red-600"
@@ -587,7 +673,44 @@ export default function WhatsappInbox({
 
             <div className="border-t border-brown-900/10 p-3">
               {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+              {replyTo && (
+                <div className="mb-2 flex items-center gap-2 rounded-xl bg-cream-dark px-3 py-2">
+                  <div className="min-w-0 flex-1 border-l-2 border-gold-500 pl-2">
+                    <p className="text-[11px] font-medium text-brown-800/60">
+                      Respondiendo a {replyTo.direction === "inbound" ? displayName(selected) : "tu mensaje"}
+                    </p>
+                    <p className="truncate text-xs text-brown-800/80">{replyTo.body || "Archivo"}</p>
+                  </div>
+                  <button
+                    onClick={() => setReplyTo(null)}
+                    aria-label="Cancelar respuesta"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-brown-800/50 hover:bg-brown-900/10"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              {uploadingMedia && (
+                <p className="mb-2 text-xs text-brown-800/50">Subiendo archivo…</p>
+              )}
               <div className="flex items-end gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) sendMedia(file);
+                  }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingMedia}
+                  aria-label="Adjuntar archivo"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cream-dark text-brown-800 transition hover:bg-brown-900/10 disabled:opacity-50"
+                >
+                  <Paperclip className="h-4 w-4" />
+                </button>
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}

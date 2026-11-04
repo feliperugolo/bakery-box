@@ -19,14 +19,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const { conversationId, phoneNumber, body } = await request.json();
+  const { conversationId, phoneNumber, body, replyToWaMessageId } = await request.json();
 
   if (!conversationId || !phoneNumber || !body?.trim()) {
     return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
   }
 
   try {
-    const { waMessageId } = await sendWhatsappMessage(phoneNumber, body.trim());
+    const { waMessageId } = await sendWhatsappMessage(phoneNumber, body.trim(), {
+      replyToWaMessageId: replyToWaMessageId || undefined,
+    });
 
     await insertMessage(supabase, {
       conversationId,
@@ -34,6 +36,7 @@ export async function POST(request: NextRequest) {
       sender: "admin",
       body: body.trim(),
       waMessageId,
+      replyToWaMessageId: replyToWaMessageId || null,
     });
 
     await touchConversation(supabase, conversationId, { preview: body.trim() });

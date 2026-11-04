@@ -78,6 +78,7 @@ export async function insertMessage(
     waMessageId?: string | null;
     mediaPath?: string | null;
     mediaType?: string | null;
+    replyToWaMessageId?: string | null;
   }
 ) {
   const { error } = await supabase.from("whatsapp_messages").insert({
@@ -88,6 +89,7 @@ export async function insertMessage(
     wa_message_id: args.waMessageId || null,
     media_path: args.mediaPath || null,
     media_type: args.mediaType || null,
+    reply_to_wa_message_id: args.replyToWaMessageId || null,
   });
 
   if (error) {
