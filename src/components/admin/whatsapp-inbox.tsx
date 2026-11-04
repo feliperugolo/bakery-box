@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus, TriangleAlert } from "lucide-react";
+import { Bot, FileText, Pause, Play, Send, User, MessageCircleWarning, BellRing, UserPlus, TriangleAlert, Check, CheckCheck, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { WhatsappConversation, WhatsappMessage } from "@/lib/types";
 import StartConversationModal from "./start-conversation-modal";
@@ -17,6 +17,26 @@ function timeLabel(iso: string) {
 
 function displayName(conv: WhatsappConversation) {
   return conv.customer_name?.trim() || conv.phone_number;
+}
+
+/**
+ * El tilde de estado, igual que en la app de WhatsApp: reloj mientras Meta
+ * todavía no confirmó el envío, un tilde cuando lo mandó, dos tildes
+ * cuando le llegó al cliente, y dos tildes celestes cuando lo leyó. Un
+ * mensaje fallido no pasa por acá — tiene su propio aviso en rojo aparte.
+ */
+function DeliveryTick({ status }: { status: string | null }) {
+  if (status === "read") {
+    return <CheckCheck className="h-3 w-3 shrink-0 text-sky-300" />;
+  }
+  if (status === "delivered") {
+    return <CheckCheck className="h-3 w-3 shrink-0" />;
+  }
+  if (status === "sent") {
+    return <Check className="h-3 w-3 shrink-0" />;
+  }
+  // Todavía no llegó ningún estado de Meta — recién lo mandamos.
+  return <Clock className="h-2.5 w-2.5 shrink-0" />;
 }
 
 // Mensajes "optimistas": los que mostramos apenas el admin aprieta Enviar,
@@ -544,6 +564,9 @@ export default function WhatsappInbox({
                               <Bot className="h-2.5 w-2.5" />
                             ))}
                           {isPending ? "Enviando…" : timeLabel(msg.created_at)}
+                          {!isPending && !fromCustomer && !failed && (
+                            <DeliveryTick status={msg.delivery_status} />
+                          )}
                         </div>
                       </div>
                       {failed && (

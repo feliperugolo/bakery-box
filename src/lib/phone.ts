@@ -26,3 +26,28 @@ export function phoneNumbersMatch(a: string | null | undefined, b: string | null
   const tailLength = Math.min(8, da.length, db.length);
   return da.slice(-tailLength) === db.slice(-tailLength);
 }
+
+/**
+ * El negocio opera solo en Argentina, así que cuando alguien tipea un
+ * número a mano (ej: para mandarle una plantilla a un contacto nuevo) casi
+ * siempre lo escribe en formato local, sin "+54" ni el "9" de celular que
+ * WhatsApp agrega automáticamente. Si no normalizamos esto antes de guardar
+ * la conversación, el mismo cliente puede terminar con dos conversaciones
+ * distintas: una con el formato que mandó Meta por el webhook y otra con el
+ * que tipeó el admin (esto pasó en la práctica, ver "Felipe" / "Felipe
+ * Rugolo"). Si el número ya trae otro código de país, se deja intacto.
+ */
+export function toWhatsappPhone(raw: string): string {
+  let digits = normalizePhoneDigits(raw);
+  if (!digits) return digits;
+
+  if (digits.startsWith("54")) {
+    const rest = digits.slice(2).replace(/^9/, "");
+    return `549${rest}`;
+  }
+
+  // Sin código de país: asumimos Argentina. Sacamos un 0 de discado local
+  // inicial si está (ej: "011..." -> "11...").
+  digits = digits.replace(/^0/, "");
+  return `549${digits}`;
+}

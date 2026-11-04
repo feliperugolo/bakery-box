@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateConversation, insertMessage, touchConversation } from "@/lib/whatsapp/store";
 import { sendWhatsappTemplate } from "@/lib/whatsapp/send";
+import { toWhatsappPhone } from "@/lib/phone";
 
 /**
  * Arranca una conversación de WhatsApp con alguien que todavía no le
@@ -23,7 +24,10 @@ export async function POST(request: NextRequest) {
   }
 
   const { phoneNumber, customerName } = await request.json();
-  const cleanPhone = (phoneNumber || "").replace(/\D/g, "");
+  // Normalizamos acá (no solo en el modal) para que esto valga también si
+  // en el futuro se llama a este endpoint desde otro lado — el modal ya
+  // manda el teléfono tal cual lo tipeó el admin, con o sin código de país.
+  const cleanPhone = toWhatsappPhone(phoneNumber || "");
   const name = (customerName || "").trim();
 
   if (!cleanPhone) {

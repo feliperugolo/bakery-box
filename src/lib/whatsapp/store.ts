@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { WhatsappConversation, WhatsappSender, WhatsappDirection } from "@/lib/types";
+import { normalizePhoneDigits } from "@/lib/phone";
 
 /**
  * Helpers para leer/escribir conversaciones y mensajes de WhatsApp.
@@ -16,11 +17,32 @@ export async function getOrCreateConversation(
   phoneNumber: string,
   customerName?: string
 ): Promise<{ conversation: WhatsappConversation; isNew: boolean }> {
-  const { data: existing } = await supabase
+  const { data: exact } = await supabase
     .from("whatsapp_conversations")
     .select("*")
     .eq("phone_number", phoneNumber)
     .maybeSingle();
+
+  let existing = exact as WhatsappConversation | null;
+
+  // El mismo número puede llegar con formatos distintos según de dónde
+  // salga (con o sin código de país, con o sin el "9" de celular que agrega
+  // Meta, con o sin el viejo "15") — si no hay match exacto, probamos por
+  // los últimos 8 dígitos antes de asumir que es un contacto nuevo. Sin
+  // esto, el mismo cliente termina con dos conversaciones duplicadas (pasó
+  // en la práctica: "Felipe" / "Felipe Rugolo").
+  if (!existing) {
+    const digits = normalizePhoneDigits(phoneNumber);
+    if (digits.length >= 8) {
+      const tail = digits.slice(-8);
+      const { data: candidates } = await supabase
+        .from("whatsapp_conversations")
+        .select("*")
+        .like("phone_number", `%${tail}`)
+        .limit(1);
+      existing = ((candidates as WhatsappConversation[] | null) || [])[0] || null;
+    }
+  }
 
   if (existing) {
     if (customerName && !existing.customer_name) {
@@ -30,7 +52,7 @@ export async function getOrCreateConversation(
         .eq("id", existing.id);
       existing.customer_name = customerName;
     }
-    return { conversation: existing as WhatsappConversation, isNew: false };
+    return { conversation: existing, isNew: false };
   }
 
   const { data: created, error } = await supabase
