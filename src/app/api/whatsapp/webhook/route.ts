@@ -33,9 +33,9 @@ const NON_TEXT_LABELS: Record<string, string> = {
 
 function nonTextReply(isNewCustomer: boolean): string {
   if (isNewCustomer) {
-    return "¡Hola! Gracias por comunicarte con Bakery Box 🧁 Soy el asistente virtual de la tienda. Por ahora este WhatsApp no puede escuchar audios ni ver imágenes — ¿me contás por mensaje de texto en qué te puedo ayudar?";
+    return "¡Hola! Gracias por comunicarte con Bakery Box 🧁 Soy el asistente virtual de la tienda. Por ahora este WhatsApp no puede escuchar audios ni ver videos o documentos — ¿me contás por mensaje de texto en qué te puedo ayudar?";
   }
-  return "Este WhatsApp todavía no puede escuchar audios ni ver imágenes. ¿Me lo escribís en un mensaje de texto? Así seguimos sin problema.";
+  return "Este WhatsApp todavía no puede escuchar audios ni ver videos o documentos. ¿Me lo escribís en un mensaje de texto? Así seguimos sin problema.";
 }
 
 function nonTextPreview(type: string): string {
@@ -273,11 +273,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    if (isImage && !isReceiptImage) {
+      // Una imagen que mandó el cliente y que la IA NO reconoció como
+      // comprobante de pago (ej: una foto de un producto, una queja, algo
+      // que no se entendió bien) — en vez de que el bot conteste con el
+      // aviso genérico de "no puedo ver imágenes", preferimos que no diga
+      // nada y que la vea una persona del equipo directamente.
+      await supabase
+        .from("whatsapp_conversations")
+        .update({ needs_attention: true })
+        .eq("id", conversation.id);
+      await notifyTeamPush(supabase);
+      return NextResponse.json({ ok: true });
+    }
+
     if (!isText && !isReceiptImage) {
-      // No sabemos procesar audios, imágenes, documentos, etc: avisarle al
-      // cliente que nos escriba en texto en vez de dejarlo sin respuesta.
-      // Una foto o PDF que SÍ reconocimos como comprobante de pago no entra
-      // aquí — sigue de largo hasta el bot normal, más abajo.
+      // No sabemos procesar audios, documentos, etc: avisarle al cliente
+      // que nos escriba en texto en vez de dejarlo sin respuesta. Las
+      // imágenes ya se filtraron arriba (con o sin comprobante), así que
+      // acá solo caen audio, video, sticker, documentos no-PDF, ubicación,
+      // contactos, etc.
       const replyText = nonTextReply(isNew);
       const { waMessageId: outboundId } = await sendWhatsappMessage(fromNumber, replyText);
       await insertMessage(supabase, {
